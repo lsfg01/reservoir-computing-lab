@@ -1,0 +1,7 @@
+type: random_sparse
+N: 100                  # tamaño del reservoir; se pasa a build(), no al constructor
+spectral_radius: 0.9
+input_scaling: 0.1
+sparsity: 0.9
+leak_rate: 1.0
+bias_scaling: 0.0
