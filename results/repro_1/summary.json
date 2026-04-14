@@ -1,0 +1,36 @@
+{
+  "sweep_name": "repro_1",
+  "n_configs": 1,
+  "n_seeds": 2,
+  "task_name": "narma10",
+  "configs": [
+    {
+      "config_id": "9c67a6f86fa9",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.1,
+        "leak_rate": 0.6
+      },
+      "n_seeds": 2,
+      "val_mean": {
+        "nmse": 0.23540060575444288,
+        "rmse": 0.046087476379610484
+      },
+      "val_std": {
+        "nmse": 0.00946824290796068,
+        "rmse": 0.001882920370911461
+      },
+      "test_mean": {
+        "nmse": 0.35057690159570226,
+        "rmse": 0.06568257616830259
+      },
+      "test_std": {
+        "nmse": 0.04605336399030974,
+        "rmse": 0.0012246089928353993
+      },
+      "best_ridge_mode": 1e-08
+    }
+  ],
+  "best_config_id": "9c67a6f86fa9",
+  "timestamp": "2026-04-14T20:54:04.326415+00:00"
+}

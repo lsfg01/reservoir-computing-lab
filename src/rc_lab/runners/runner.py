@@ -120,6 +120,7 @@ class ExperimentRunner:
             task = resolve_task(task_cfg["name"])
             task_data = task.generate(
                 n_train=task_cfg["n_train"],
+                n_val=0,
                 n_test=task_cfg["n_test"],
                 washout=task_cfg["washout"],
                 seed=seed,

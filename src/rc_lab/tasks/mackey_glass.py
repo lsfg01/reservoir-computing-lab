@@ -64,14 +64,28 @@ class MackeyGlassTask(BaseTask):
     def primary_metric(self) -> str:
         return "nmse"
 
-    def generate(self, n_train: int, n_test: int, washout: int, seed: int) -> TaskData:
-        total = n_train + n_test
+    def generate(self, n_train: int, n_val: int, n_test: int, washout: int, seed: int) -> TaskData:
+        total = n_train + n_val + n_test
         u, y = generate_mackey_glass(total, seed=seed, tau=self._tau, dt=self._dt)
 
+        u_train = u[:n_train]
+        y_train = y[:n_train]
+
+        if n_val > 0:
+            u_val: np.ndarray | None = u[n_train : n_train + n_val]
+            y_val: np.ndarray | None = y[n_train : n_train + n_val]
+        else:
+            u_val, y_val = None, None
+
+        u_test = u[n_train + n_val :]
+        y_test = y[n_train + n_val :]
+
         return TaskData(
-            u_train=u[:n_train],
-            y_train=y[:n_train],
-            u_test=u[n_train:],
-            y_test=y[n_train:],
+            u_train=u_train,
+            y_train=y_train,
+            u_val=u_val,
+            y_val=y_val,
+            u_test=u_test,
+            y_test=y_test,
             washout=washout,
         )
