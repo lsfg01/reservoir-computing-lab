@@ -20,14 +20,14 @@ ReadoutMode = Literal["states", "extended"]
 # Resolvers: mapeo nombre/tipo → clase concreta
 # ---------------------------------------------------------------------------
 
-def resolve_task(name: str) -> BaseTask:
+def resolve_task(name: str, state_policy: str = "reset") -> BaseTask:
     """Instancia la tarea correspondiente al nombre dado."""
     from rc_lab.tasks.narma10 import Narma10Task
 
-    registry: dict[str, type[BaseTask]] = {
-        "narma10": Narma10Task,
-    }
-    # MackeyGlassTask se registrará cuando esté implementada (tarea 14)
+    if name == "narma10":
+        return Narma10Task(state_policy=state_policy)
+
+    registry: dict[str, type[BaseTask]] = {}
     try:
         from rc_lab.tasks.mackey_glass import MackeyGlassTask
         registry["mackey_glass"] = MackeyGlassTask
@@ -35,7 +35,7 @@ def resolve_task(name: str) -> BaseTask:
         pass
 
     if name not in registry:
-        raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: {list(registry)}")
+        raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['narma10'] + {list(registry)}")
     return registry[name]()
 
 
@@ -117,7 +117,10 @@ class ExperimentRunner:
             set_seed(seed)
 
             # 2. Generar datos de la tarea
-            task = resolve_task(task_cfg["name"])
+            task = resolve_task(
+                task_cfg["name"],
+                state_policy=task_cfg.get("state_policy", "reset"),
+            )
             task_data = task.generate(
                 n_train=task_cfg["n_train"],
                 n_val=0,

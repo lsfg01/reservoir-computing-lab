@@ -17,7 +17,6 @@ from rc_lab.tasks.base import BaseTask, TaskData
 from rc_lab.utils.seeding import set_seed
 from rc_lab.utils.timing import timer
 
-StatePolicy = Literal["carryover", "reset"]
 ReadoutMode = Literal["states", "extended"]
 
 _METRIC_FNS = {"nmse": nmse, "rmse": rmse}
@@ -74,17 +73,16 @@ def make_config_id(config_point: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
 
 
-def _resolve_task(name: str) -> BaseTask:
+def _resolve_task(name: str, state_policy: str = "reset") -> BaseTask:
     from rc_lab.tasks.narma10 import Narma10Task
     from rc_lab.tasks.mackey_glass import MackeyGlassTask
 
-    registry: dict[str, type[BaseTask]] = {
-        "narma10": Narma10Task,
-        "mackey_glass": MackeyGlassTask,
-    }
-    if name not in registry:
-        raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: {list(registry)}")
-    return registry[name]()
+    if name == "narma10":
+        return Narma10Task(state_policy=state_policy)
+    elif name == "mackey_glass":
+        return MackeyGlassTask()
+    else:
+        raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['narma10', 'mackey_glass']")
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +110,10 @@ class SweepRunner:
         self._seeds: list[int] = sweep_config["sweep"]["seeds"]
 
         task_cfg = sweep_config["task"]
-        self._task = _resolve_task(task_cfg["name"])
+        self._task = _resolve_task(
+            task_cfg["name"],
+            state_policy=task_cfg.get("state_policy", "reset"),
+        )
         self._task_name: str = task_cfg["name"]
         self._n_train: int = task_cfg["n_train"]
         self._n_val: int = task_cfg["n_val"]
@@ -125,7 +126,6 @@ class SweepRunner:
         readout_cfg = sweep_config["readout"]
         self._ridge_candidates: list[float] = readout_cfg["ridge_candidates"]
         self._readout_mode: ReadoutMode = readout_cfg.get("features", "states")
-        self._state_policy_val: StatePolicy = readout_cfg.get("state_policy_val", "carryover")
 
         self._metric_names: list[str] = sweep_config.get("metrics", ["nmse"])
         self._primary_metric: str = self._task.primary_metric
@@ -199,26 +199,40 @@ class SweepRunner:
             leak_rate = config_point.get("leak_rate", 1.0)
             esn = ESNModel(matrices.W, matrices.Win, matrices.bias, leak_rate=leak_rate)
 
-            # Estados train
+            # Estados train (washout incluido en u_train)
             with timer() as t_train:
                 X_train, x_end_train = esn.run_states(
                     task_data.u_train, washout=self._washout
                 )
             timing["train_states_s"] = t_train["elapsed"]
 
-            # Tensores alineados tras washout
+            # Y_train puntuado: descartar los primeros washout pasos
             u_train_post = task_data.u_train[self._washout:]
             Y_train = task_data.y_train[self._washout:]
 
-            # Estados val
+            # Estados val y test — bifurcación por semántica de TaskData
             assert task_data.u_val is not None and task_data.y_val is not None
-            x0_val = x_end_train if self._state_policy_val == "carryover" else None
-            X_val, _ = esn.run_states(task_data.u_val, washout=0, x0=x0_val)
+
+            if task_data.u_val_full is not None:
+                # reset: cada split tiene su propio warmup de longitud washout
+                X_val, _ = esn.run_states(
+                    task_data.u_val_full, washout=self._washout, x0=None
+                )
+                X_test, _ = esn.run_states(
+                    task_data.u_test_full, washout=self._washout, x0=None
+                )
+            else:
+                # carryover: estado continuo desde train
+                X_val, x_end_val = esn.run_states(
+                    task_data.u_val, washout=0, x0=x_end_train
+                )
+                X_test, _ = esn.run_states(
+                    task_data.u_test, washout=0, x0=x_end_val
+                )
+
+            # u_val / y_val / u_test / y_test ya son puntuados en TaskData
             u_val_post = task_data.u_val
             Y_val = task_data.y_val
-
-            # Estados test (siempre reset)
-            X_test, _ = esn.run_states(task_data.u_test, washout=0, x0=None)
             u_test_post = task_data.u_test
             Y_test = task_data.y_test
 

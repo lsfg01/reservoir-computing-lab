@@ -1,2 +1,0 @@
-config_id,spectral_radius,input_scaling,leak_rate,best_ridge_mode,val_nmse_mean,val_nmse_std,test_nmse_mean,test_nmse_std,n_seeds
-9c67a6f86fa9,0.9,0.1,0.6,1e-08,0.23540060575444288,0.00946824290796068,0.35057690159570226,0.04605336399030974,2

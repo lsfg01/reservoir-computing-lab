@@ -9,6 +9,7 @@ task:
   n_val: 500
   n_test: 1000
   washout: 200
+  state_policy: reset  # reset: cada split tiene warmup propio de longitud washout
 
 reservoir:
   type: random_sparse
@@ -27,7 +28,6 @@ readout:
   type: ridge
   features: states
   ridge_candidates: [1.0e-8, 1.0e-6, 1.0e-4, 1.0e-2, 1.0e-1, 1.0]
-  state_policy_val: carryover
 
 metrics:
   - nmse
