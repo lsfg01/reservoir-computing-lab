@@ -1,0 +1,60 @@
+sweep:
+  name: region_selection_multitask_v1
+  output_dir: results/region_selection_multitask_v1
+  seeds: [42, 123, 456, 789, 1024]
+
+reservoir:
+  type: random_sparse
+  N: 100
+  sparsity: 0.9
+  bias_scaling: 0.0
+
+grid:
+  spectral_radius: [0.6, 0.7, 0.8, 0.9, 1.0, 1.1]
+  input_scaling: [0.05, 0.1, 0.15, 0.2, 0.3, 0.4]
+  leak_rate: [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+tasks:
+  narma10:
+    n_train: 3000
+    n_val: 1000
+    n_test: 1500
+    washout: 200
+    state_policy: reset
+
+  mackey_glass:
+    n_train: 3000
+    n_val: 1000
+    n_test: 1500
+    washout: 200
+    state_policy: reset
+    tau: 17
+    dt: 0.1
+
+  memory_capacity:
+    washout: 200
+    input_length: 5000
+    fit_fraction: 0.5
+    kmax: 200
+    ridge_param: 1.0e-6
+
+readout:
+  type: ridge
+  features: states
+  ridge_candidates: [1.0e-10, 1.0e-8, 1.0e-6, 1.0e-4, 1.0e-2, 1.0]
+
+metrics:
+  - nmse
+  - rmse
+
+ranking:
+  shortlist_top_n: 12
+  narma10:
+    metric: nmse
+    direction: min
+  mackey_glass:
+    metric: nmse
+    direction: min
+  memory_capacity:
+    metric: mc_total
+    direction: max

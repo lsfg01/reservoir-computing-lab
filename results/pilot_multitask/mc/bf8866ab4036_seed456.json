@@ -1,0 +1,16 @@
+{
+  "sweep_name": "pilot_multitask",
+  "config_id": "bf8866ab4036",
+  "seed": 456,
+  "config_point": {
+    "spectral_radius": 0.9,
+    "input_scaling": 0.2,
+    "leak_rate": 0.6
+  },
+  "mc_total": 14.661843753351155,
+  "kmax": 200,
+  "timing": {
+    "mc_s": 0.030697899999722722
+  },
+  "timestamp": "2026-04-16T17:26:35.794622+00:00"
+}
