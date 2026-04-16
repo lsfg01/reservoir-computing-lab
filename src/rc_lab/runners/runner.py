@@ -20,23 +20,25 @@ ReadoutMode = Literal["states", "extended"]
 # Resolvers: mapeo nombre/tipo → clase concreta
 # ---------------------------------------------------------------------------
 
-def resolve_task(name: str, state_policy: str = "reset") -> BaseTask:
+def resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None = None) -> BaseTask:
     """Instancia la tarea correspondiente al nombre dado."""
     from rc_lab.tasks.narma10 import Narma10Task
+
+    if task_cfg is None:
+        task_cfg = {}
 
     if name == "narma10":
         return Narma10Task(state_policy=state_policy)
 
-    registry: dict[str, type[BaseTask]] = {}
-    try:
+    if name == "mackey_glass":
         from rc_lab.tasks.mackey_glass import MackeyGlassTask
-        registry["mackey_glass"] = MackeyGlassTask
-    except ImportError:
-        pass
+        return MackeyGlassTask(
+            tau=task_cfg.get("tau", 17),
+            dt=task_cfg.get("dt", 0.1),
+            state_policy=state_policy,
+        )
 
-    if name not in registry:
-        raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['narma10'] + {list(registry)}")
-    return registry[name]()
+    raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['narma10', 'mackey_glass']")
 
 
 def resolve_reservoir(reservoir_cfg: dict[str, Any]) -> BaseReservoirBuilder:
@@ -120,6 +122,7 @@ class ExperimentRunner:
             task = resolve_task(
                 task_cfg["name"],
                 state_policy=task_cfg.get("state_policy", "reset"),
+                task_cfg=task_cfg,
             )
             task_data = task.generate(
                 n_train=task_cfg["n_train"],
@@ -150,10 +153,19 @@ class ExperimentRunner:
                 readout.fit(F_train, Y_train)
             timing["train_s"] = t_train["elapsed"]
 
-            # 10-13. Fase de test
+            # 10-13. Fase de test — semántica delegada en TaskData
             with timer() as t_test:
-                x0_test = None if self._state_policy == "reset" else x_final
-                X_test, _ = esn.run_states(task_data.u_test, washout=0, x0=x0_test)
+                if task_data.u_test_full is not None:
+                    # reset: la task preparó u_test_full con warmup explícito
+                    X_test, _ = esn.run_states(
+                        task_data.u_test_full, washout=washout, x0=None
+                    )
+                else:
+                    # carryover: estado continuo desde train
+                    X_test, _ = esn.run_states(
+                        task_data.u_test, washout=0, x0=x_final
+                    )
+                # u_test y y_test son siempre los arrays puntuados
                 F_test = build_readout_features(X_test, task_data.u_test, self._readout_mode)
                 y_pred = readout.predict(F_test)
             timing["test_s"] = t_test["elapsed"]

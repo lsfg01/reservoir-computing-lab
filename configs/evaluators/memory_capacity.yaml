@@ -1,0 +1,5 @@
+washout: 200
+input_length: 3000
+fit_fraction: 0.5
+# kmax: null  # null → heurística 2*N; fijar explícitamente si se comparan reservoirs con distinto N
+ridge_param: 1.0e-6

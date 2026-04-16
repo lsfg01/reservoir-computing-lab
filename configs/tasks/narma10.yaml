@@ -2,3 +2,4 @@ name: narma10
 n_train: 2000
 n_test: 1000
 washout: 200
+state_policy: reset  # reset: cada split tiene warmup propio de longitud washout

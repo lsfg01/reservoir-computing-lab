@@ -73,14 +73,21 @@ def make_config_id(config_point: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
 
 
-def _resolve_task(name: str, state_policy: str = "reset") -> BaseTask:
+def _resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None = None) -> BaseTask:
     from rc_lab.tasks.narma10 import Narma10Task
     from rc_lab.tasks.mackey_glass import MackeyGlassTask
+
+    if task_cfg is None:
+        task_cfg = {}
 
     if name == "narma10":
         return Narma10Task(state_policy=state_policy)
     elif name == "mackey_glass":
-        return MackeyGlassTask()
+        return MackeyGlassTask(
+            tau=task_cfg.get("tau", 17),
+            dt=task_cfg.get("dt", 0.1),
+            state_policy=state_policy,
+        )
     else:
         raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['narma10', 'mackey_glass']")
 
@@ -113,6 +120,7 @@ class SweepRunner:
         self._task = _resolve_task(
             task_cfg["name"],
             state_policy=task_cfg.get("state_policy", "reset"),
+            task_cfg=task_cfg,
         )
         self._task_name: str = task_cfg["name"]
         self._n_train: int = task_cfg["n_train"]
