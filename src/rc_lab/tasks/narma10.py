@@ -157,8 +157,10 @@ class Narma10Task(BaseTask):
         """
         total = washout + n_train + n_val + n_test
         u, y = generate_narma10(total, seed=seed)
-
+        
+        # Extraer bloques
         i = 0
+        
         u_train = u[i : i + washout + n_train]
         y_train = y[i : i + washout + n_train]
         i += washout + n_train

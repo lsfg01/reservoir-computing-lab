@@ -1,0 +1,16 @@
+{
+  "sweep_name": "region_selection_multitask_v1",
+  "config_id": "4b181bf29230",
+  "seed": 1024,
+  "config_point": {
+    "spectral_radius": 0.8,
+    "input_scaling": 0.4,
+    "leak_rate": 1.0
+  },
+  "mc_total": 15.415499161734617,
+  "kmax": 200,
+  "timing": {
+    "mc_s": 0.06352899999910733
+  },
+  "timestamp": "2026-04-16T18:24:18.771050+00:00"
+}

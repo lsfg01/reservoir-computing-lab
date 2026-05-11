@@ -1,0 +1,33 @@
+{
+  "sweep_name": "region_selection_multitask_v1_mackey_glass",
+  "config_id": "adc4d1ebebf2",
+  "seed": 42,
+  "config_point": {
+    "spectral_radius": 0.7,
+    "input_scaling": 0.1,
+    "leak_rate": 0.5
+  },
+  "best_ridge": 1e-10,
+  "val_curve": {
+    "1e-10": 5.108530981853302e-11,
+    "1e-08": 1.4667160792689527e-09,
+    "1e-06": 6.927988730250083e-08,
+    "0.0001": 1.1727218288500014e-06,
+    "0.01": 5.806580320005561e-05,
+    "1.0": 0.0025057401140671227
+  },
+  "val_metrics": {
+    "nmse": 5.108530981853302e-11,
+    "rmse": 1.6107246709473394e-06
+  },
+  "test_metrics": {
+    "nmse": 5.174576378111392e-11,
+    "rmse": 1.4696190656100963e-06
+  },
+  "timing": {
+    "train_states_s": 0.018466100002115127,
+    "ridge_select_s": 0.011837400001240894,
+    "total_s": 0.06108979999771691
+  },
+  "timestamp": "2026-04-16T18:22:37.997345+00:00"
+}

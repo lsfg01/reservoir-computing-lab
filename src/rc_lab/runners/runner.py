@@ -59,7 +59,7 @@ def resolve_reservoir(reservoir_cfg: dict[str, Any]) -> BaseReservoirBuilder:
 
 
 # ---------------------------------------------------------------------------
-# RunResult
+# RunResult (clase del resultado de la run)
 # ---------------------------------------------------------------------------
 
 @dataclasses.dataclass
@@ -94,8 +94,8 @@ class ExperimentRunner:
                 raise ValueError(f"Falta la clave requerida en config: {key!r}")
 
         self._config = config
-        exp = config["experiment"]
-        self._state_policy: StatePolicy = exp.get("state_policy", "reset")
+        exp = config["experiment"] 
+        self._state_policy: StatePolicy = exp.get("state_policy", "reset") #eliminar ya que en la sweep-upgrade state_policy cambia a la tarea
         self._readout_mode: ReadoutMode = exp.get("readout_features", "states")
 
         if self._state_policy not in ("reset", "carryover"):
@@ -143,7 +143,7 @@ class ExperimentRunner:
             leak_rate = res_cfg.get("leak_rate", 1.0)
             esn = ESNModel(matrices.W, matrices.Win, matrices.bias, leak_rate=leak_rate)
 
-            # 5-9. Fase de entrenamiento
+            # 5. Fase de entrenamiento
             with timer() as t_train:
                 X_train, x_final = esn.run_states(task_data.u_train, washout=washout)
                 u_train_post = task_data.u_train[washout:]
@@ -153,7 +153,7 @@ class ExperimentRunner:
                 readout.fit(F_train, Y_train)
             timing["train_s"] = t_train["elapsed"]
 
-            # 10-13. Fase de test — semántica delegada en TaskData
+            # 6. Fase de test — semántica delegada en TaskData
             with timer() as t_test:
                 if task_data.u_test_full is not None:
                     # reset: la task preparó u_test_full con warmup explícito
@@ -170,7 +170,7 @@ class ExperimentRunner:
                 y_pred = readout.predict(F_test)
             timing["test_s"] = t_test["elapsed"]
 
-            # 14. Calcular métricas
+            # 7. Calcular métricas
             y_test = task_data.y_test
             metrics: dict[str, float] = {}
             for m in metric_names:
@@ -189,7 +189,7 @@ class ExperimentRunner:
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
-        # 15. Persistir resultado
+        # 8. Persistir resultado
         output_dir = exp_cfg.get("output_dir", "results")
         save_result(result, output_dir)
 
