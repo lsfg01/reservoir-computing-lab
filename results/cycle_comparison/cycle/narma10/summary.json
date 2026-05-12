@@ -1,0 +1,166 @@
+{
+  "sweep_name": "cycle_comparison_cycle_narma10",
+  "n_configs": 6,
+  "n_seeds": 5,
+  "task_name": "narma10",
+  "configs": [
+    {
+      "config_id": "65189332b1c4",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.1,
+        "leak_rate": 0.9
+      },
+      "n_seeds": 5,
+      "val_mean": {
+        "nmse": 0.1473895684454118,
+        "rmse": 0.041355626214240146
+      },
+      "val_std": {
+        "nmse": 0.013419201489091698,
+        "rmse": 0.00457623401390482
+      },
+      "test_mean": {
+        "nmse": 0.13904807929729096,
+        "rmse": 0.03863364916791562
+      },
+      "test_std": {
+        "nmse": 0.009107016769274555,
+        "rmse": 0.0007090342035695116
+      },
+      "best_ridge_mode": 1e-08
+    },
+    {
+      "config_id": "129fe242d561",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.1,
+        "leak_rate": 1.0
+      },
+      "n_seeds": 5,
+      "val_mean": {
+        "nmse": 0.16394640072009573,
+        "rmse": 0.04358384601100921
+      },
+      "val_std": {
+        "nmse": 0.013291901036679241,
+        "rmse": 0.004296722881914458
+      },
+      "test_mean": {
+        "nmse": 0.1546130236266541,
+        "rmse": 0.04074559762546739
+      },
+      "test_std": {
+        "nmse": 0.008739191977882553,
+        "rmse": 0.0005740529322178935
+      },
+      "best_ridge_mode": 1e-10
+    },
+    {
+      "config_id": "b5cf1e3871f2",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.15,
+        "leak_rate": 0.9
+      },
+      "n_seeds": 5,
+      "val_mean": {
+        "nmse": 0.14801449308839823,
+        "rmse": 0.0414396129468884
+      },
+      "val_std": {
+        "nmse": 0.012276262019397265,
+        "rmse": 0.004409309865787385
+      },
+      "test_mean": {
+        "nmse": 0.13604570909117925,
+        "rmse": 0.03821737070055072
+      },
+      "test_std": {
+        "nmse": 0.008266824575394266,
+        "rmse": 0.0005538222259718144
+      },
+      "best_ridge_mode": 1e-06
+    },
+    {
+      "config_id": "92815a841b21",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.15,
+        "leak_rate": 1.0
+      },
+      "n_seeds": 5,
+      "val_mean": {
+        "nmse": 0.1633038202091714,
+        "rmse": 0.0435232566475255
+      },
+      "val_std": {
+        "nmse": 0.01261141546226055,
+        "rmse": 0.004476912881232576
+      },
+      "test_mean": {
+        "nmse": 0.15416480589147813,
+        "rmse": 0.04067123724423867
+      },
+      "test_std": {
+        "nmse": 0.011145976926974492,
+        "rmse": 0.000957314353443777
+      },
+      "best_ridge_mode": 1e-10
+    },
+    {
+      "config_id": "0292ac89d7b8",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.2,
+        "leak_rate": 0.9
+      },
+      "n_seeds": 5,
+      "val_mean": {
+        "nmse": 0.14814569802280825,
+        "rmse": 0.04145947544844969
+      },
+      "val_std": {
+        "nmse": 0.01233018104700001,
+        "rmse": 0.0044346453638649565
+      },
+      "test_mean": {
+        "nmse": 0.13383908528350572,
+        "rmse": 0.03789847003212267
+      },
+      "test_std": {
+        "nmse": 0.009319687571521684,
+        "rmse": 0.0007399655568182399
+      },
+      "best_ridge_mode": 1e-06
+    },
+    {
+      "config_id": "5033ae01f908",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.2,
+        "leak_rate": 1.0
+      },
+      "n_seeds": 5,
+      "val_mean": {
+        "nmse": 0.16261854008187565,
+        "rmse": 0.04344626217453496
+      },
+      "val_std": {
+        "nmse": 0.013994507691999863,
+        "rmse": 0.00476634157196262
+      },
+      "test_mean": {
+        "nmse": 0.1519841359631393,
+        "rmse": 0.040373190000561755
+      },
+      "test_std": {
+        "nmse": 0.012103927424798615,
+        "rmse": 0.0010207461769268155
+      },
+      "best_ridge_mode": 0.0001
+    }
+  ],
+  "best_config_id": "65189332b1c4",
+  "timestamp": "2026-05-12T10:15:18.503607+00:00"
+}

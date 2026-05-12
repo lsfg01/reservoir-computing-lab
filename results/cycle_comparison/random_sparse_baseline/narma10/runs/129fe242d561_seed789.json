@@ -1,0 +1,41 @@
+{
+  "sweep_name": "cycle_comparison_random_sparse_baseline_narma10",
+  "config_id": "129fe242d561",
+  "seed": 789,
+  "config_point": {
+    "spectral_radius": 0.9,
+    "input_scaling": 0.1,
+    "leak_rate": 1.0
+  },
+  "best_ridge": 1e-10,
+  "val_curve": {
+    "1e-10": 0.12271054447479789,
+    "1e-08": 0.1261897162715465,
+    "1e-06": 0.1518965554065339,
+    "0.0001": 0.17421521890960065,
+    "0.01": 0.24408543222081835,
+    "1.0": 0.4240324591676224
+  },
+  "val_metrics": {
+    "nmse": 0.12271054447479789,
+    "rmse": 0.038732575296544405
+  },
+  "test_metrics": {
+    "nmse": 0.0933060813001646,
+    "rmse": 0.032488857989924326
+  },
+  "timing": {
+    "train_states_s": 0.018212800001492724,
+    "ridge_select_s": 0.012593899999046698,
+    "total_s": 0.06347100000130013
+  },
+  "timestamp": "2026-05-12T10:15:03.640383+00:00",
+  "reservoir_diagnostics": {
+    "spectral_radius": 0.8999999999999985,
+    "mean_abs_eigenvalue": 0.542261388926761,
+    "spectral_norm": 1.6944983256502646,
+    "frobenius_norm": 8.368564165408115,
+    "density": 0.1,
+    "henrici_departure": 0.7210852221136422
+  }
+}

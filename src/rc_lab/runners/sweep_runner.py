@@ -12,7 +12,8 @@ from rc_lab.metrics.error import nmse, rmse
 from rc_lab.models.esn import ESNModel
 from rc_lab.readouts.ridge import RidgeReadout, build_readout_features
 from rc_lab.readouts.ridge_sweep import RidgeParamSelector, RidgeSelectionResult
-from rc_lab.reservoirs.random_sparse import RandomSparseReservoir
+from rc_lab.reservoirs.diagnostics import reservoir_diagnostics as _reservoir_diagnostics
+from rc_lab.runners.runner import resolve_reservoir
 from rc_lab.tasks.base import BaseTask, TaskData
 from rc_lab.utils.seeding import set_seed
 from rc_lab.utils.timing import timer
@@ -38,6 +39,7 @@ class SweepRunResult:
     test_metrics: dict[str, float]
     timing: dict[str, float]
     timestamp: str
+    reservoir_diagnostics: dict[str, float] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
@@ -193,16 +195,22 @@ class SweepRunner:
         timing: dict[str, float] = {}
 
         with timer() as t_total:
-            # Construir reservoir
-            reservoir = RandomSparseReservoir(
-                spectral_radius=config_point["spectral_radius"],
-                input_scaling=config_point["input_scaling"],
-                sparsity=self._res_cfg.get("sparsity", 0.9),
-                leak_rate=config_point.get("leak_rate", 1.0),
-                bias_scaling=self._res_cfg.get("bias_scaling", 0.0),
-            )
+            # Construir reservoir dinámicamente según el tipo configurado.
+            # spectral_radius e input_scaling vienen del config_point (grid);
+            # el resto de parámetros (type, N, sparsity, bias_scaling, etc.)
+            # vienen del bloque reservoir del YAML.
+            res_params = {
+                **self._res_cfg,
+                "spectral_radius": config_point["spectral_radius"],
+                "input_scaling": config_point["input_scaling"],
+            }
+            # leak_rate pertenece a ESNModel, no al builder de matrices.
+            res_params.pop("leak_rate", None)
+
+            reservoir_builder = resolve_reservoir(res_params)
             n_inputs = task_data.u_train.shape[1]
-            matrices = reservoir.build(N=self._N, n_inputs=n_inputs, seed=seed)
+            matrices = reservoir_builder.build(N=self._N, n_inputs=n_inputs, seed=seed)
+            diag = _reservoir_diagnostics(matrices.W)
 
             leak_rate = config_point.get("leak_rate", 1.0)
             esn = ESNModel(matrices.W, matrices.Win, matrices.bias, leak_rate=leak_rate)
@@ -291,6 +299,7 @@ class SweepRunner:
             test_metrics=test_metrics,
             timing=timing,
             timestamp=datetime.now(timezone.utc).isoformat(),
+            reservoir_diagnostics=diag,
         )
 
     def _save_run_result(self, result: SweepRunResult) -> None:

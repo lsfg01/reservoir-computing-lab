@@ -1,0 +1,24 @@
+{
+  "sweep_name": "cycle_comparison_random_sparse_baseline",
+  "config_id": "0292ac89d7b8",
+  "seed": 42,
+  "config_point": {
+    "spectral_radius": 0.9,
+    "input_scaling": 0.2,
+    "leak_rate": 0.9
+  },
+  "mc_total": 19.375637453207407,
+  "kmax": 200,
+  "timing": {
+    "mc_s": 0.04700099999899976
+  },
+  "timestamp": "2026-05-12T10:15:13.230967+00:00",
+  "reservoir_diagnostics": {
+    "spectral_radius": 0.9002418552819632,
+    "mean_abs_eigenvalue": 0.5418750575019459,
+    "spectral_norm": 1.7603688612534059,
+    "frobenius_norm": 8.577869517970441,
+    "density": 0.1,
+    "henrici_departure": 0.7324133701670523
+  }
+}

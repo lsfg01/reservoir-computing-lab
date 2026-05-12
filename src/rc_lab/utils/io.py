@@ -131,6 +131,9 @@ def load_sweep_results(output_dir: str | Path) -> list[Any]:
     for json_file in sorted(runs_dir.glob("*.json")):
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
+        # Compatibilidad hacia atrás: ficheros JSON anteriores a esta feature
+        # no contienen el campo reservoir_diagnostics.
+        data.setdefault("reservoir_diagnostics", {})
         results.append(SweepRunResult(**data))
 
     return results

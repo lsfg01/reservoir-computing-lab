@@ -1,0 +1,41 @@
+{
+  "sweep_name": "cycle_comparison_cycle_mackey_glass",
+  "config_id": "92815a841b21",
+  "seed": 123,
+  "config_point": {
+    "spectral_radius": 0.9,
+    "input_scaling": 0.15,
+    "leak_rate": 1.0
+  },
+  "best_ridge": 1e-10,
+  "val_curve": {
+    "1e-10": 1.2145715308900597e-12,
+    "1e-08": 6.299746998937953e-11,
+    "1e-06": 5.246981277616029e-09,
+    "0.0001": 2.095122984058959e-07,
+    "0.01": 7.969332899655968e-06,
+    "1.0": 0.0003059688340776693
+  },
+  "val_metrics": {
+    "nmse": 1.2145715308900597e-12,
+    "rmse": 2.483618255917152e-07
+  },
+  "test_metrics": {
+    "nmse": 1.1573433673379493e-12,
+    "rmse": 2.1978522322128852e-07
+  },
+  "timing": {
+    "train_states_s": 0.0189912999921944,
+    "ridge_select_s": 0.012807299994165078,
+    "total_s": 0.07418879997567274
+  },
+  "timestamp": "2026-05-12T10:15:19.955982+00:00",
+  "reservoir_diagnostics": {
+    "spectral_radius": 0.8999999999999959,
+    "mean_abs_eigenvalue": 0.899999999999992,
+    "spectral_norm": 0.8999999999999932,
+    "frobenius_norm": 8.999999999999932,
+    "density": 0.01,
+    "henrici_departure": 5.1299510349266345e-08
+  }
+}

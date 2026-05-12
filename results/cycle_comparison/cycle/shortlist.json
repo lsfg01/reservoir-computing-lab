@@ -1,0 +1,130 @@
+{
+  "shortlist_top_n": 5,
+  "configs": [
+    {
+      "config_id": "5033ae01f908",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.2,
+        "leak_rate": 1.0
+      },
+      "n_seeds": 5,
+      "narma10_primary_metric": "nmse",
+      "narma10_val_mean": 0.16261854008187565,
+      "narma10_val_std": 0.013994507691999863,
+      "narma10_test_mean": 0.1519841359631393,
+      "narma10_test_std": 0.012103927424798615,
+      "mg_primary_metric": "nmse",
+      "mg_val_mean": 7.922005916175037e-13,
+      "mg_val_std": 1.9915076761469287e-13,
+      "mg_test_mean": 7.586045606138441e-13,
+      "mg_test_std": 1.862298293567734e-13,
+      "mc_total_mean": 36.295508112628305,
+      "mc_total_std": 0.3290216844384553,
+      "rank_narma10": 4,
+      "rank_mg": 1,
+      "rank_mc": 3,
+      "aggregate_rank": 2.6666666666666665
+    },
+    {
+      "config_id": "92815a841b21",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.15,
+        "leak_rate": 1.0
+      },
+      "n_seeds": 5,
+      "narma10_primary_metric": "nmse",
+      "narma10_val_mean": 0.1633038202091714,
+      "narma10_val_std": 0.01261141546226055,
+      "narma10_test_mean": 0.15416480589147813,
+      "narma10_test_std": 0.011145976926974492,
+      "mg_primary_metric": "nmse",
+      "mg_val_mean": 1.1008940028753734e-12,
+      "mg_val_std": 1.833194325998716e-13,
+      "mg_test_mean": 1.0225667726067762e-12,
+      "mg_test_std": 1.780356870320523e-13,
+      "mc_total_mean": 41.27645172498917,
+      "mc_total_std": 0.39799687903397435,
+      "rank_narma10": 5,
+      "rank_mg": 3,
+      "rank_mc": 2,
+      "aggregate_rank": 3.3333333333333335
+    },
+    {
+      "config_id": "0292ac89d7b8",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.2,
+        "leak_rate": 0.9
+      },
+      "n_seeds": 5,
+      "narma10_primary_metric": "nmse",
+      "narma10_val_mean": 0.14814569802280825,
+      "narma10_val_std": 0.01233018104700001,
+      "narma10_test_mean": 0.13383908528350572,
+      "narma10_test_std": 0.009319687571521684,
+      "mg_primary_metric": "nmse",
+      "mg_val_mean": 9.82601701343489e-13,
+      "mg_val_std": 2.873539766363242e-13,
+      "mg_test_mean": 9.254896814563145e-13,
+      "mg_test_std": 2.547031331391093e-13,
+      "mc_total_mean": 28.1308301714008,
+      "mc_total_std": 0.3369847097692351,
+      "rank_narma10": 3,
+      "rank_mg": 2,
+      "rank_mc": 6,
+      "aggregate_rank": 3.6666666666666665
+    },
+    {
+      "config_id": "65189332b1c4",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.1,
+        "leak_rate": 0.9
+      },
+      "n_seeds": 5,
+      "narma10_primary_metric": "nmse",
+      "narma10_val_mean": 0.1473895684454118,
+      "narma10_val_std": 0.013419201489091698,
+      "narma10_test_mean": 0.13904807929729096,
+      "narma10_test_std": 0.009107016769274555,
+      "mg_primary_metric": "nmse",
+      "mg_val_mean": 2.2521353055225823e-12,
+      "mg_val_std": 3.985296060866008e-13,
+      "mg_test_mean": 2.0853556303101447e-12,
+      "mg_test_std": 3.7369284856139617e-13,
+      "mc_total_mean": 35.44851235914213,
+      "mc_total_std": 0.5041969763257571,
+      "rank_narma10": 1,
+      "rank_mg": 6,
+      "rank_mc": 4,
+      "aggregate_rank": 3.6666666666666665
+    },
+    {
+      "config_id": "b5cf1e3871f2",
+      "config_point": {
+        "spectral_radius": 0.9,
+        "input_scaling": 0.15,
+        "leak_rate": 0.9
+      },
+      "n_seeds": 5,
+      "narma10_primary_metric": "nmse",
+      "narma10_val_mean": 0.14801449308839823,
+      "narma10_val_std": 0.012276262019397265,
+      "narma10_test_mean": 0.13604570909117925,
+      "narma10_test_std": 0.008266824575394266,
+      "mg_primary_metric": "nmse",
+      "mg_val_mean": 1.421353976501358e-12,
+      "mg_val_std": 3.1090273707543065e-13,
+      "mg_test_mean": 1.3116616488559816e-12,
+      "mg_test_std": 2.882764341217522e-13,
+      "mc_total_mean": 31.14081132301385,
+      "mc_total_std": 0.39330084506752067,
+      "rank_narma10": 2,
+      "rank_mg": 4,
+      "rank_mc": 5,
+      "aggregate_rank": 3.6666666666666665
+    }
+  ]
+}

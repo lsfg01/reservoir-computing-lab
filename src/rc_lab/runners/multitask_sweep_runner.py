@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from rc_lab.reservoirs.diagnostics import reservoir_diagnostics as _reservoir_diagnostics
+
 
 # ---------------------------------------------------------------------------
 # Configuración de ranking
@@ -42,6 +44,7 @@ class MCRunResult:
     kmax: int
     timing: dict[str, float]
     timestamp: str
+    reservoir_diagnostics: dict[str, float] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
@@ -530,7 +533,7 @@ class MultiTaskSweepRunner:
         from datetime import datetime, timezone
 
         from rc_lab.models.esn import ESNModel
-        from rc_lab.reservoirs.random_sparse import RandomSparseReservoir
+        from rc_lab.runners.runner import resolve_reservoir
         from rc_lab.runners.sweep_runner import make_config_id
         from rc_lab.utils.timing import timer
         from rc_lab.utils.io import save_mc_run_result
@@ -544,18 +547,26 @@ class MultiTaskSweepRunner:
             for seed in self._seeds:
                 # No se llama a set_seed: el reservoir se construye con seed explícita
                 # y MemoryCapacityEvaluator usa RNG local con seed — reproducibilidad garantizada
-                reservoir = RandomSparseReservoir(
-                    spectral_radius=config_point["spectral_radius"],
-                    input_scaling=config_point["input_scaling"],
-                    sparsity=self._res_cfg.get("sparsity", 0.9),
-                    leak_rate=config_point.get("leak_rate", 1.0),
-                    bias_scaling=self._res_cfg.get("bias_scaling", 0.0),
-                )
+
+                # Construir parámetros del reservoir: bloque YAML + overrides del grid.
+                # leak_rate pertenece a ESNModel, no al builder — se elimina antes de
+                # llamar a resolve_reservoir.
+                res_params = {
+                    **self._res_cfg,
+                    "spectral_radius": config_point["spectral_radius"],
+                    "input_scaling": config_point["input_scaling"],
+                }
+                res_params.pop("leak_rate", None)
+
+                reservoir_builder = resolve_reservoir(res_params)
                 N = self._res_cfg["N"]
-                matrices = reservoir.build(N=N, n_inputs=1, seed=seed)
+                matrices = reservoir_builder.build(N=N, n_inputs=1, seed=seed)
+                diag = _reservoir_diagnostics(matrices.W)
+
+                leak_rate = config_point.get("leak_rate", 1.0)
                 esn = ESNModel(
                     matrices.W, matrices.Win, matrices.bias,
-                    leak_rate=config_point.get("leak_rate", 1.0),
+                    leak_rate=leak_rate,
                 )
 
                 with timer() as t:
@@ -570,6 +581,7 @@ class MultiTaskSweepRunner:
                     kmax=mc_result.kmax,
                     timing={"mc_s": t["elapsed"]},
                     timestamp=datetime.now(timezone.utc).isoformat(),
+                    reservoir_diagnostics=diag,
                 )
                 save_mc_run_result(run, mc_dir)
                 mc_runs.append(run)

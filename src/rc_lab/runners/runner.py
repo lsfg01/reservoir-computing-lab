@@ -44,14 +44,22 @@ def resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None =
 def resolve_reservoir(reservoir_cfg: dict[str, Any]) -> BaseReservoirBuilder:
     """Instancia el reservoir builder a partir del bloque de configuración."""
     from rc_lab.reservoirs.random_sparse import RandomSparseReservoir
+    from rc_lab.reservoirs.cycle import CycleReservoir
+    from rc_lab.reservoirs.cycle_jump import CycleJumpReservoir
 
     registry: dict[str, type[BaseReservoirBuilder]] = {
         "random_sparse": RandomSparseReservoir,
+        "cycle":         CycleReservoir,
+        "cycle_jump":    CycleJumpReservoir,
     }
 
     rtype = reservoir_cfg.get("type", "random_sparse")
     if rtype not in registry:
-        raise ValueError(f"Tipo de reservoir desconocido: {rtype!r}. Disponibles: {list(registry)}")
+        available = list(registry.keys())
+        raise ValueError(
+            f"Tipo de reservoir desconocido: {rtype!r}. "
+            f"Disponibles: {available}"
+        )
 
     # Extraer sólo los parámetros del constructor (excluir 'type' y 'N')
     params = {k: v for k, v in reservoir_cfg.items() if k not in ("type", "N")}

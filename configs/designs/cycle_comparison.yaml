@@ -1,0 +1,87 @@
+sweep:
+  name: cycle_comparison
+  output_dir: results/cycle_comparison
+  seeds: [42, 123, 456, 789, 2024]
+
+designs:
+  - name: random_sparse_baseline
+    reservoir:
+      type: random_sparse
+      N: 100
+      sparsity: 0.9
+      bias_scaling: 0.0
+
+  - name: cycle
+    reservoir:
+      type: cycle
+      N: 100
+      cycle_weight: 1.0
+      bias_scaling: 0.0
+
+  - name: cycle_jump_j3
+    reservoir:
+      type: cycle_jump
+      N: 100
+      cycle_weight: 1.0
+      jumps: [3]
+      jump_weight: 0.3
+      bias_scaling: 0.0
+
+  - name: cycle_jump_j7
+    reservoir:
+      type: cycle_jump
+      N: 100
+      cycle_weight: 1.0
+      jumps: [7]
+      jump_weight: 0.3
+      bias_scaling: 0.0
+
+grid:
+  spectral_radius: [0.9]
+  input_scaling: [0.10, 0.15, 0.20]
+  leak_rate: [0.9, 1.0]
+
+tasks:
+  narma10:
+    n_train: 3000
+    n_val: 1000
+    n_test: 1500
+    washout: 200
+    state_policy: reset
+
+  mackey_glass:
+    n_train: 3000
+    n_val: 1000
+    n_test: 1500
+    washout: 200
+    state_policy: reset
+    tau: 17
+    dt: 0.1
+
+  memory_capacity:
+    washout: 200
+    input_length: 5000
+    fit_fraction: 0.5
+    kmax: 200
+    ridge_param: 1.0e-6
+
+readout:
+  type: ridge
+  features: states
+  ridge_candidates: [1.0e-10, 1.0e-8, 1.0e-6, 1.0e-4, 1.0e-2, 1.0]
+
+metrics:
+  - nmse
+  - rmse
+
+ranking:
+  shortlist_top_n: 5
+  narma10:
+    metric: nmse
+    direction: min
+  mackey_glass:
+    metric: nmse
+    direction: min
+  memory_capacity:
+    metric: mc_total
+    direction: max
