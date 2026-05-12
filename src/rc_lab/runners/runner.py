@@ -46,11 +46,13 @@ def resolve_reservoir(reservoir_cfg: dict[str, Any]) -> BaseReservoirBuilder:
     from rc_lab.reservoirs.random_sparse import RandomSparseReservoir
     from rc_lab.reservoirs.cycle import CycleReservoir
     from rc_lab.reservoirs.cycle_jump import CycleJumpReservoir
+    from rc_lab.reservoirs.nonnormal_chain import NonnormalChainReservoir
 
     registry: dict[str, type[BaseReservoirBuilder]] = {
-        "random_sparse": RandomSparseReservoir,
-        "cycle":         CycleReservoir,
-        "cycle_jump":    CycleJumpReservoir,
+        "random_sparse":   RandomSparseReservoir,
+        "cycle":           CycleReservoir,
+        "cycle_jump":      CycleJumpReservoir,
+        "nonnormal_chain": NonnormalChainReservoir,
     }
 
     rtype = reservoir_cfg.get("type", "random_sparse")

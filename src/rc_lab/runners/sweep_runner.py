@@ -139,6 +139,7 @@ class SweepRunner:
 
         self._metric_names: list[str] = sweep_config.get("metrics", ["nmse"])
         self._primary_metric: str = self._task.primary_metric
+        self._transient_kmax: int = sweep_config.get("diagnostics", {}).get("transient_kmax", 50)
 
     # ------------------------------------------------------------------
     # Interfaz pública
@@ -210,7 +211,7 @@ class SweepRunner:
             reservoir_builder = resolve_reservoir(res_params)
             n_inputs = task_data.u_train.shape[1]
             matrices = reservoir_builder.build(N=self._N, n_inputs=n_inputs, seed=seed)
-            diag = _reservoir_diagnostics(matrices.W)
+            diag = _reservoir_diagnostics(matrices.W, transient_kmax=self._transient_kmax)
 
             leak_rate = config_point.get("leak_rate", 1.0)
             esn = ESNModel(matrices.W, matrices.Win, matrices.bias, leak_rate=leak_rate)

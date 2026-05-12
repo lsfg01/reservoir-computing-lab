@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from rc_lab.runners.multitask_sweep_runner import MultiTaskSweepRunner, MultiTaskSweepSummary
+from rc_lab.utils.io import make_json_safe
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,8 @@ def build_design_config(
     - ``reservoir``        == ``design["reservoir"]``
     - ``grid``, ``tasks``, ``readout``, ``metrics``, ``ranking`` se propagan
       sin modificación desde ``base_cfg``.
+    - ``diagnostics`` se propaga desde ``base_cfg`` si está presente, para que
+      ``transient_kmax`` sea consistente en todos los runners (Requisito 11.1).
     """
     base_sweep = base_cfg["sweep"]
     base_name = base_sweep["name"]
@@ -84,7 +87,7 @@ def build_design_config(
 
     design_name: str = design["name"]
 
-    return {
+    cfg: dict[str, Any] = {
         "sweep": {
             "name": f"{base_name}_{design_name}",
             "output_dir": f"{base_output_dir}/{design_name}",
@@ -97,6 +100,12 @@ def build_design_config(
         "metrics": base_cfg["metrics"],
         "ranking": base_cfg["ranking"],
     }
+
+    # Propagate diagnostics block if present (Requisito 11.1)
+    if "diagnostics" in base_cfg:
+        cfg["diagnostics"] = base_cfg["diagnostics"]
+
+    return cfg
 
 
 # ---------------------------------------------------------------------------
@@ -263,22 +272,34 @@ class DesignComparisonRunner:
         - ``design_name``, ``reservoir_type``, ``config_id``
         - ``spectral_radius``, ``input_scaling``, ``leak_rate``
         - ``n_seeds``
-        - ``narma10_val_nmse_mean``, ``narma10_test_nmse_mean``
-        - ``mg_val_nmse_mean``, ``mg_test_nmse_mean``
-        - ``mc_total_mean``
+        - ``narma10_val_nmse_mean``, ``narma10_test_nmse_mean`` (si narma10 activa)
+        - ``mg_val_nmse_mean``, ``mg_test_nmse_mean`` (si mackey_glass activa)
+        - ``mc_total_mean`` (si memory_capacity activa)
         - Ranks internos: ``rank_narma10_within_design``, ``rank_mg_within_design``,
           ``rank_mc_within_design``, ``aggregate_rank_within_design``
         - Ranks globales: ``global_rank_narma10``, ``global_rank_mg``,
           ``global_rank_mc``, ``global_aggregate_rank``
+          (solo para tareas activas; columnas de tareas deshabilitadas omitidas)
         - Deltas vs baseline (para filas no-baseline con mismo ``config_id``):
           ``delta_vs_baseline_narma10_val_nmse``, ``delta_vs_baseline_mg_val_nmse``,
           ``delta_vs_baseline_mc_total``
         - Diagnósticos agregados (si disponibles): ``diag_*_mean``
 
-        Requisitos: 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 8.4
+        Requisitos: 1.5, 1.6, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 8.4, 10.1, 10.2,
+                    10.4, 10.5, 10.6
         """
         import numpy as np
         from scipy.stats import rankdata
+
+        # ------------------------------------------------------------------
+        # 0. Determinar tareas activas desde la config raíz
+        #    (NO inferir desde artefactos en disco ni desde columnas)
+        # ------------------------------------------------------------------
+        _all_tasks = ["narma10", "mackey_glass", "memory_capacity"]
+        enabled_tasks: list[str] = [
+            t for t in _all_tasks
+            if self._tasks.get(t, {}).get("enabled", True)
+        ]
 
         # ------------------------------------------------------------------
         # 1. Construir filas base
@@ -304,41 +325,64 @@ class DesignComparisonRunner:
                     "input_scaling": cp.get("input_scaling", None),
                     "leak_rate": cp.get("leak_rate", None),
                     "n_seeds": entry.n_seeds,
-                    "narma10_val_nmse_mean": entry.narma10_val_mean,
-                    "narma10_test_nmse_mean": entry.narma10_test_mean,
-                    "mg_val_nmse_mean": entry.mg_val_mean,
-                    "mg_test_nmse_mean": entry.mg_test_mean,
-                    "mc_total_mean": entry.mc_total_mean,
                     # Within-design ranks (inherited from MultiTaskSweepSummary)
-                    "rank_narma10_within_design": entry.rank_narma10,
-                    "rank_mg_within_design": entry.rank_mg,
-                    "rank_mc_within_design": entry.rank_mc,
                     "aggregate_rank_within_design": entry.aggregate_rank,
                 }
+
+                # Incluir columnas de tareas activas únicamente
+                if "narma10" in enabled_tasks:
+                    row["narma10_val_nmse_mean"] = entry.narma10_val_mean
+                    row["narma10_test_nmse_mean"] = entry.narma10_test_mean
+                    row["rank_narma10_within_design"] = entry.rank_narma10
+
+                if "mackey_glass" in enabled_tasks:
+                    row["mg_val_nmse_mean"] = entry.mg_val_mean
+                    row["mg_test_nmse_mean"] = entry.mg_test_mean
+                    row["rank_mg_within_design"] = entry.rank_mg
+
+                if "memory_capacity" in enabled_tasks:
+                    row["mc_total_mean"] = entry.mc_total_mean
+                    row["rank_mc_within_design"] = entry.rank_mc
+
                 rows.append(row)
 
         if not rows:
             return rows
 
         # ------------------------------------------------------------------
-        # 2. Calcular ranks globales (method="min" para empates deterministas)
+        # 2. Calcular ranks globales solo para tareas activas
+        #    (method="min" para empates deterministas)
         # ------------------------------------------------------------------
-        n10_vals = np.array([r["narma10_val_nmse_mean"] for r in rows], dtype=float)
-        mg_vals  = np.array([r["mg_val_nmse_mean"]      for r in rows], dtype=float)
-        mc_vals  = np.array([r["mc_total_mean"]          for r in rows], dtype=float)
+        global_rank_arrays: dict[str, "np.ndarray"] = {}
 
-        # narma10 y mg: menor NMSE = mejor → rank ascendente
-        global_rank_n10 = rankdata(n10_vals, method="min").astype(int)
-        global_rank_mg  = rankdata(mg_vals,  method="min").astype(int)
-        # mc: mayor MC = mejor → rank descendente (negar valores)
-        global_rank_mc  = rankdata(-mc_vals, method="min").astype(int)
+        if "narma10" in enabled_tasks:
+            n10_vals = np.array([r["narma10_val_nmse_mean"] for r in rows], dtype=float)
+            # narma10: menor NMSE = mejor → rank ascendente
+            global_rank_arrays["narma10"] = rankdata(n10_vals, method="min").astype(int)
 
-        global_agg_rank = (global_rank_n10 + global_rank_mg + global_rank_mc) / 3.0
+        if "mackey_glass" in enabled_tasks:
+            mg_vals = np.array([r["mg_val_nmse_mean"] for r in rows], dtype=float)
+            # mackey_glass: menor NMSE = mejor → rank ascendente
+            global_rank_arrays["mackey_glass"] = rankdata(mg_vals, method="min").astype(int)
+
+        if "memory_capacity" in enabled_tasks:
+            mc_vals = np.array([r["mc_total_mean"] for r in rows], dtype=float)
+            # mc: mayor MC = mejor → rank descendente (negar valores)
+            global_rank_arrays["memory_capacity"] = rankdata(-mc_vals, method="min").astype(int)
+
+        # global_aggregate_rank = media de los ranks globales de tareas activas
+        if global_rank_arrays:
+            global_agg_rank = np.mean(list(global_rank_arrays.values()), axis=0)
+        else:
+            global_agg_rank = np.zeros(len(rows))
 
         for i, row in enumerate(rows):
-            row["global_rank_narma10"]   = int(global_rank_n10[i])
-            row["global_rank_mg"]        = int(global_rank_mg[i])
-            row["global_rank_mc"]        = int(global_rank_mc[i])
+            if "narma10" in enabled_tasks:
+                row["global_rank_narma10"] = int(global_rank_arrays["narma10"][i])
+            if "mackey_glass" in enabled_tasks:
+                row["global_rank_mg"] = int(global_rank_arrays["mackey_glass"][i])
+            if "memory_capacity" in enabled_tasks:
+                row["global_rank_mc"] = int(global_rank_arrays["memory_capacity"][i])
             row["global_aggregate_rank"] = float(global_agg_rank[i])
 
         # ------------------------------------------------------------------
@@ -358,18 +402,23 @@ class DesignComparisonRunner:
             if baseline is None:
                 continue
             # Negativo = mejora para NMSE; positivo = mejora para MC
-            row["delta_vs_baseline_narma10_val_nmse"] = (
-                row["narma10_val_nmse_mean"] - baseline["narma10_val_nmse_mean"]
-            )
-            row["delta_vs_baseline_mg_val_nmse"] = (
-                row["mg_val_nmse_mean"] - baseline["mg_val_nmse_mean"]
-            )
-            row["delta_vs_baseline_mc_total"] = (
-                row["mc_total_mean"] - baseline["mc_total_mean"]
-            )
+            if "narma10" in enabled_tasks:
+                row["delta_vs_baseline_narma10_val_nmse"] = (
+                    row["narma10_val_nmse_mean"] - baseline["narma10_val_nmse_mean"]
+                )
+            if "mackey_glass" in enabled_tasks:
+                row["delta_vs_baseline_mg_val_nmse"] = (
+                    row["mg_val_nmse_mean"] - baseline["mg_val_nmse_mean"]
+                )
+            if "memory_capacity" in enabled_tasks:
+                row["delta_vs_baseline_mc_total"] = (
+                    row["mc_total_mean"] - baseline["mc_total_mean"]
+                )
 
         # ------------------------------------------------------------------
-        # 4. Agregar diagnósticos desde JSONs individuales de narma10/runs/
+        # 4. Agregar diagnósticos desde JSONs individuales
+        #    Prioridad: narma10/runs/ si activa, si no mc/ (para compatibilidad)
+        #    Saltar gracefully claves ausentes (compatibilidad con resultados antiguos)
         # ------------------------------------------------------------------
         diag_keys = [
             "spectral_radius",
@@ -378,18 +427,36 @@ class DesignComparisonRunner:
             "frobenius_norm",
             "density",
             "henrici_departure",
+            # Nuevas claves (Requisito 10.4)
+            "singular_value_max",
+            "singular_value_min",
+            "singular_value_mean",
+            "singular_value_q90",
+            "singular_condition_number",
+            "transient_growth_max",
+            "transient_growth_argmax",
         ]
         diag_col_map = {k: f"diag_{k}_mean" for k in diag_keys}
 
         # Intentar leer diagnósticos para cada (design_name, config_id)
+        # Buscar en narma10/runs/ si activa, si no en mc/
         diag_data: dict[tuple[str, str], dict[str, list[float]]] = {}
 
         for design_name, _summary in design_results:
             design_output_dir = self._output_dir / design_name
-            narma10_runs_dir = design_output_dir / "narma10" / "runs"
-            if not narma10_runs_dir.exists():
+
+            # Determinar directorio de runs donde buscar diagnósticos
+            if "narma10" in enabled_tasks:
+                runs_dir = design_output_dir / "narma10" / "runs"
+            elif "mackey_glass" in enabled_tasks:
+                runs_dir = design_output_dir / "mackey_glass" / "runs"
+            else:
+                runs_dir = design_output_dir / "mc"
+
+            if not runs_dir.exists():
                 continue
-            for json_file in sorted(narma10_runs_dir.glob("*.json")):
+
+            for json_file in sorted(runs_dir.glob("*.json")):
                 try:
                     with open(json_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
@@ -402,6 +469,7 @@ class DesignComparisonRunner:
                 key = (design_name, config_id)
                 if key not in diag_data:
                     diag_data[key] = {k: [] for k in diag_keys}
+                # Saltar gracefully claves ausentes (Requisito 10.5)
                 for k in diag_keys:
                     val = diag.get(k)
                     if val is not None:
@@ -457,6 +525,7 @@ class DesignComparisonRunner:
         - ``fieldnames`` derivados de las claves de la primera fila (captura
           columnas opcionales como ``diag_*`` y ``delta_*``).
         - ``extrasaction="ignore"`` para robustez ante columnas variables.
+        - Las columnas de tareas deshabilitadas se omiten del CSV.
 
         JSON
         ----
@@ -468,8 +537,9 @@ class DesignComparisonRunner:
         - ``"timestamp"``: ISO 8601 UTC.
         - ``"n_designs"``: número de diseños distintos.
         - ``"n_configs_per_design"``: total de filas / n_designs.
+        - ``"enabled_tasks"``: lista de nombres de tareas activas.
 
-        Requisitos: 5.9, 5.10, 5.11
+        Requisitos: 1.6, 1.7, 5.9, 5.10, 5.11, 10.1, 10.2, 10.3
         """
         if not comparison_table:
             raise ValueError("save_comparison: comparison_table está vacía")
@@ -481,8 +551,27 @@ class DesignComparisonRunner:
         json_path = self._output_dir / "comparison_summary.json"
 
         # ------------------------------------------------------------------
+        # Determinar tareas activas desde la config (Requisito 10.3.b)
+        # ------------------------------------------------------------------
+        enabled_tasks: list[str] = [
+            task_name
+            for task_name in ("narma10", "mackey_glass", "memory_capacity")
+            if self._tasks.get(task_name, {}).get("enabled", True)
+        ]
+        mg_enabled = "mackey_glass" in enabled_tasks
+
+        # ------------------------------------------------------------------
         # CSV
         # ------------------------------------------------------------------
+        # Columnas de mackey_glass que se omiten cuando está deshabilitada
+        mg_columns = {
+            "mg_val_nmse_mean",
+            "mg_test_nmse_mean",
+            "rank_mg_within_design",
+            "global_rank_mg",
+            "delta_vs_baseline_mg_val_nmse",
+        }
+
         preferred_order = [
             "design_name",
             "reservoir_type",
@@ -513,14 +602,31 @@ class DesignComparisonRunner:
             "diag_frobenius_norm_mean",
             "diag_density_mean",
             "diag_henrici_departure_mean",
+            "diag_singular_value_max_mean",
+            "diag_singular_value_min_mean",
+            "diag_singular_value_mean_mean",
+            "diag_singular_value_q90_mean",
+            "diag_singular_condition_number_mean",
+            "diag_transient_growth_max_mean",
+            "diag_transient_growth_argmax_mean",
         ]
 
         all_keys = set()
         for row in comparison_table:
             all_keys.update(row.keys())
 
-        fieldnames = [k for k in preferred_order if k in all_keys]
-        fieldnames += sorted(k for k in all_keys if k not in fieldnames)
+        # Filtrar columnas de mg si mackey_glass está deshabilitada
+        if not mg_enabled:
+            all_keys -= mg_columns
+
+        fieldnames = [
+            k for k in preferred_order
+            if k in all_keys and (mg_enabled or k not in mg_columns)
+        ]
+        fieldnames += sorted(
+            k for k in all_keys
+            if k not in fieldnames and (mg_enabled or k not in mg_columns)
+        )
 
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -556,12 +662,22 @@ class DesignComparisonRunner:
             "timestamp": timestamp,
             "n_designs": n_designs,
             "n_configs_per_design": n_configs_per_design,
+            "enabled_tasks": enabled_tasks,
             "best_overall": best_overall,
             "best_by_design": best_by_design,
             "table": comparison_table,
         }
 
+        def _json_default(obj: Any) -> Any:
+            """Serializa tipos no estándar: inf/nan → null, resto → str."""
+            import math
+            if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
+                return None
+            return str(obj)
+
+        json_payload = make_json_safe(json_payload)
+
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(json_payload, f, indent=2, ensure_ascii=False, default=str)
+            json.dump(json_payload, f, indent=2, ensure_ascii=False, default=_json_default, allow_nan=False)
 
         return csv_path, json_path

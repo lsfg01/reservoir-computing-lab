@@ -1,10 +1,31 @@
 import dataclasses
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+
+def make_json_safe(obj: Any) -> Any:
+    """
+    Recursively converts obj to a JSON-safe structure:
+    - dataclasses → dict (via dataclasses.asdict)
+    - dict → dict with values recursively sanitised
+    - list/tuple → list with elements recursively sanitised
+    - non-finite float (inf, -inf, nan) → None
+    - all other values → unchanged
+    """
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        obj = dataclasses.asdict(obj)
+    if isinstance(obj, dict):
+        return {k: make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [make_json_safe(v) for v in obj]
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
+    return obj
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -30,9 +51,10 @@ def save_result(result: Any, output_dir: str | Path) -> Path:
     # Añadir timestamp si no está presente
     if "timestamp" not in data or not data["timestamp"]:
         data["timestamp"] = datetime.now(timezone.utc).isoformat()
+    data = make_json_safe(data)
 
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+        json.dump(data, f, indent=2, allow_nan=False)
 
     return path
 
@@ -56,8 +78,9 @@ def save_sweep_run_result(result: Any, output_dir: str | Path) -> Path:
     path = runs_dir / filename
 
     data = dataclasses.asdict(result)
+    data = make_json_safe(data)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+        json.dump(data, f, indent=2, allow_nan=False)
 
     return path
 
@@ -78,8 +101,9 @@ def save_sweep_summary(summary: Any, output_dir: str | Path) -> tuple[Path, Path
     # JSON completo
     json_path = output_dir / "summary.json"
     data = dataclasses.asdict(summary)
+    data = make_json_safe(data)
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+        json.dump(data, f, indent=2, allow_nan=False)
 
     # CSV plano
     csv_path = output_dir / "summary.csv"
@@ -155,8 +179,9 @@ def save_mc_run_result(result: Any, output_dir: str | Path) -> Path:
     path = output_dir / filename
 
     data = dataclasses.asdict(result)
+    data = make_json_safe(data)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+        json.dump(data, f, indent=2, allow_nan=False)
 
     return path
 
@@ -182,42 +207,50 @@ def save_multitask_summary(summary: Any, output_dir: str | Path) -> tuple[Path, 
     # --- summary.json ---
     json_path = output_dir / "summary.json"
     data = dataclasses.asdict(summary)
+    data = make_json_safe(data)
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+        json.dump(data, f, indent=2, allow_nan=False)
 
     # --- summary.csv ---
-    # Determinar métricas primarias desde el primer entry (o desde ranking_config)
+    # Determinar qué tareas están habilitadas (backward-compat: si no existe el
+    # atributo, asumir las tres activas para preservar el comportamiento anterior)
+    enabled_tasks = getattr(summary, "enabled_tasks", ["narma10", "mackey_glass", "memory_capacity"])
+    mg_enabled  = "mackey_glass"    in enabled_tasks
+    n10_enabled = "narma10"         in enabled_tasks
+    mc_enabled  = "memory_capacity" in enabled_tasks
+
+    # Determinar métricas primarias sólo para las tareas habilitadas
     if summary.configs:
-        n10_metric = summary.configs[0].narma10_primary_metric
-        mg_metric  = summary.configs[0].mg_primary_metric
+        n10_metric = summary.configs[0].narma10_primary_metric if n10_enabled else None
+        mg_metric  = summary.configs[0].mg_primary_metric      if mg_enabled  else None
     else:
-        n10_metric = "nmse"
-        mg_metric  = "nmse"
+        n10_metric = "nmse" if n10_enabled else None
+        mg_metric  = "nmse" if mg_enabled  else None
 
     # Columnas del grid (orden estable)
     grid_keys = list(summary.grid.keys()) if summary.grid else []
 
-    fieldnames = (
-        ["config_id"]
-        + grid_keys
-        + [
+    # Construir fieldnames condicionalmente según tareas habilitadas
+    fieldnames = ["config_id"] + grid_keys
+    if n10_enabled:
+        fieldnames += [
             f"narma10_val_{n10_metric}_mean",
             f"narma10_val_{n10_metric}_std",
             f"narma10_test_{n10_metric}_mean",
             f"narma10_test_{n10_metric}_std",
+            "rank_narma10",
+        ]
+    if mg_enabled:
+        fieldnames += [
             f"mg_val_{mg_metric}_mean",
             f"mg_val_{mg_metric}_std",
             f"mg_test_{mg_metric}_mean",
             f"mg_test_{mg_metric}_std",
-            "mc_total_mean",
-            "mc_total_std",
-            "rank_narma10",
             "rank_mg",
-            "rank_mc",
-            "aggregate_rank",
-            "n_seeds",
         ]
-    )
+    if mc_enabled:
+        fieldnames += ["mc_total_mean", "mc_total_std", "rank_mc"]
+    fieldnames += ["aggregate_rank", "n_seeds"]
 
     csv_path = output_dir / "summary.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -227,21 +260,24 @@ def save_multitask_summary(summary: Any, output_dir: str | Path) -> tuple[Path, 
             row: dict[str, Any] = {"config_id": entry.config_id}
             for k in grid_keys:
                 row[k] = entry.config_point.get(k, "")
-            row[f"narma10_val_{n10_metric}_mean"]  = entry.narma10_val_mean
-            row[f"narma10_val_{n10_metric}_std"]   = entry.narma10_val_std
-            row[f"narma10_test_{n10_metric}_mean"] = entry.narma10_test_mean
-            row[f"narma10_test_{n10_metric}_std"]  = entry.narma10_test_std
-            row[f"mg_val_{mg_metric}_mean"]        = entry.mg_val_mean
-            row[f"mg_val_{mg_metric}_std"]         = entry.mg_val_std
-            row[f"mg_test_{mg_metric}_mean"]       = entry.mg_test_mean
-            row[f"mg_test_{mg_metric}_std"]        = entry.mg_test_std
-            row["mc_total_mean"]   = entry.mc_total_mean
-            row["mc_total_std"]    = entry.mc_total_std
-            row["rank_narma10"]    = entry.rank_narma10
-            row["rank_mg"]         = entry.rank_mg
-            row["rank_mc"]         = entry.rank_mc
-            row["aggregate_rank"]  = entry.aggregate_rank
-            row["n_seeds"]         = entry.n_seeds
+            if n10_enabled:
+                row[f"narma10_val_{n10_metric}_mean"]  = entry.narma10_val_mean
+                row[f"narma10_val_{n10_metric}_std"]   = entry.narma10_val_std
+                row[f"narma10_test_{n10_metric}_mean"] = entry.narma10_test_mean
+                row[f"narma10_test_{n10_metric}_std"]  = entry.narma10_test_std
+                row["rank_narma10"] = entry.rank_narma10
+            if mg_enabled:
+                row[f"mg_val_{mg_metric}_mean"]  = entry.mg_val_mean
+                row[f"mg_val_{mg_metric}_std"]   = entry.mg_val_std
+                row[f"mg_test_{mg_metric}_mean"] = entry.mg_test_mean
+                row[f"mg_test_{mg_metric}_std"]  = entry.mg_test_std
+                row["rank_mg"] = entry.rank_mg
+            if mc_enabled:
+                row["mc_total_mean"] = entry.mc_total_mean
+                row["mc_total_std"]  = entry.mc_total_std
+                row["rank_mc"]       = entry.rank_mc
+            row["aggregate_rank"] = entry.aggregate_rank
+            row["n_seeds"]        = entry.n_seeds
             writer.writerow(row)
 
     # --- shortlist.json ---
@@ -250,11 +286,12 @@ def save_multitask_summary(summary: Any, output_dir: str | Path) -> tuple[Path, 
         dataclasses.asdict(e) for e in summary.configs
         if e.config_id in shortlist_ids
     ]
+    shortlist_entries = make_json_safe(shortlist_entries)
     shortlist_path = output_dir / "shortlist.json"
     with open(shortlist_path, "w", encoding="utf-8") as f:
         json.dump(
             {"shortlist_top_n": summary.shortlist_top_n, "configs": shortlist_entries},
-            f, indent=2, default=str,
+            f, indent=2, allow_nan=False,
         )
 
     return json_path, csv_path, shortlist_path

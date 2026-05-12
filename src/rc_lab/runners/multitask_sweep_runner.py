@@ -80,30 +80,33 @@ class MultiTaskConfigEntry:
     almacenan el nombre de la métrica elegida (e.g. "nmse") para que la capa de
     exportación pueda construir nombres de columna explícitos en el CSV
     (e.g. narma10_val_nmse_mean).
+
+    Los campos de tareas deshabilitadas se establecen a None. Los campos de rank
+    de tareas deshabilitadas se establecen a None también.
     """
     config_id: str
     config_point: dict[str, Any]
     n_seeds: int
-    # NARMA-10: métrica primaria val y test
-    narma10_primary_metric: str   # e.g. "nmse" o "rmse"
-    narma10_val_mean: float
-    narma10_val_std: float
-    narma10_test_mean: float
-    narma10_test_std: float
-    # Mackey-Glass: métrica primaria val y test
-    mg_primary_metric: str        # e.g. "nmse" o "rmse"
-    mg_val_mean: float
-    mg_val_std: float
-    mg_test_mean: float
-    mg_test_std: float
-    # Memory Capacity
-    mc_total_mean: float
-    mc_total_std: float
-    # Ranks por tarea (1 = mejor, según métrica primaria configurable)
-    rank_narma10: int
-    rank_mg: int
-    rank_mc: int
-    # Agregación inter-tarea
+    # NARMA-10: métrica primaria val y test (None si la tarea está deshabilitada)
+    narma10_primary_metric: str | None   # e.g. "nmse" o "rmse"
+    narma10_val_mean: float | None
+    narma10_val_std: float | None
+    narma10_test_mean: float | None
+    narma10_test_std: float | None
+    # Mackey-Glass: métrica primaria val y test (None si la tarea está deshabilitada)
+    mg_primary_metric: str | None        # e.g. "nmse" o "rmse"
+    mg_val_mean: float | None
+    mg_val_std: float | None
+    mg_test_mean: float | None
+    mg_test_std: float | None
+    # Memory Capacity (None si la tarea está deshabilitada)
+    mc_total_mean: float | None
+    mc_total_std: float | None
+    # Ranks por tarea (1 = mejor, según métrica primaria configurable; None si deshabilitada)
+    rank_narma10: int | None
+    rank_mg: int | None
+    rank_mc: int | None
+    # Agregación inter-tarea (media de ranks de tareas activas únicamente)
     aggregate_rank: float
 
 
@@ -119,6 +122,7 @@ class MultiTaskSweepSummary:
     shortlist: list[str]                      # config_ids de la shortlist
     shortlist_top_n: int
     timestamp: str
+    enabled_tasks: list[str] = dataclasses.field(default_factory=lambda: ["narma10", "mackey_glass", "memory_capacity"])
 
 
 # ---------------------------------------------------------------------------
@@ -180,10 +184,11 @@ def build_subtask_config(mt_config: dict[str, Any], task_name: str) -> dict[str,
     - sweep.output_dir = {mt_config.sweep.output_dir}/{task_name}
     - sweep.seeds      = mt_config.sweep.seeds (sin modificación)
     - grid y readout se propagan sin modificación
+    - diagnostics se propaga si está presente en mt_config
     """
     task_params: dict[str, Any] = dict(mt_config["tasks"][task_name])
 
-    return {
+    subtask_cfg: dict[str, Any] = {
         "sweep": {
             "name": f"{mt_config['sweep']['name']}_{task_name}",
             "output_dir": f"{mt_config['sweep']['output_dir']}/{task_name}",
@@ -198,6 +203,12 @@ def build_subtask_config(mt_config: dict[str, Any], task_name: str) -> dict[str,
         "readout": mt_config["readout"],
         "metrics": mt_config["metrics"],
     }
+
+    # Propagar bloque diagnostics si está presente en la config raíz
+    if "diagnostics" in mt_config:
+        subtask_cfg["diagnostics"] = mt_config["diagnostics"]
+
+    return subtask_cfg
 
 
 # ---------------------------------------------------------------------------
@@ -217,99 +228,181 @@ class MultiTaskAggregator:
         self,
         ranking_config: dict[str, "RankingSpec"],
         shortlist_top_n: int = 10,
+        enabled_tasks: "list[str] | None" = None,
     ) -> None:
         self._ranking_config = ranking_config
         self._shortlist_top_n = shortlist_top_n
+        # Si no se especifica, usar las tres tareas (comportamiento original)
+        self._enabled_tasks: list[str] = (
+            enabled_tasks
+            if enabled_tasks is not None
+            else ["narma10", "mackey_glass", "memory_capacity"]
+        )
 
     def aggregate(
         self,
-        narma10_summary: Any,   # SweepSummary
-        mg_summary: Any,        # SweepSummary
-        mc_summary: MCTaskSummary,
+        narma10_summary: Any,   # SweepSummary or None
+        mg_summary: Any,        # SweepSummary or None
+        mc_summary: "MCTaskSummary | None",
     ) -> "MultiTaskSweepSummary":
         import numpy as np
 
-        # --- Construir índices por config_id ---
-        n10_by_id = {c.config_id: c for c in narma10_summary.configs}
-        mg_by_id  = {c.config_id: c for c in mg_summary.configs}
-        mc_by_id  = {c.config_id: c for c in mc_summary.configs}
+        enabled = self._enabled_tasks
 
-        # --- Verificar alineación ---
-        ids_n10 = set(n10_by_id)
-        ids_mg  = set(mg_by_id)
-        ids_mc  = set(mc_by_id)
-        if ids_n10 != ids_mg or ids_n10 != ids_mc:
-            missing_mg  = ids_n10 - ids_mg
-            missing_mc  = ids_n10 - ids_mc
-            extra_mg    = ids_mg  - ids_n10
-            extra_mc    = ids_mc  - ids_n10
-            raise ValueError(
-                f"config_id mismatch between tasks. "
-                f"Missing in mackey_glass: {missing_mg}, extra: {extra_mg}. "
-                f"Missing in mc: {missing_mc}, extra: {extra_mc}."
-            )
+        # --- Construir índices por config_id para tareas activas ---
+        n10_by_id = {c.config_id: c for c in narma10_summary.configs} if narma10_summary is not None else {}
+        mg_by_id  = {c.config_id: c for c in mg_summary.configs}      if mg_summary is not None else {}
+        mc_by_id  = {c.config_id: c for c in mc_summary.configs}      if mc_summary is not None else {}
 
-        config_ids = sorted(n10_by_id.keys())
+        # Determinar el conjunto de config_ids desde las tareas activas
+        active_id_sets: list[set[str]] = []
+        if "narma10" in enabled and n10_by_id:
+            active_id_sets.append(set(n10_by_id))
+        if "mackey_glass" in enabled and mg_by_id:
+            active_id_sets.append(set(mg_by_id))
+        if "memory_capacity" in enabled and mc_by_id:
+            active_id_sets.append(set(mc_by_id))
+
+        if not active_id_sets:
+            raise ValueError("No hay tareas activas para agregar.")
+
+        # Verificar alineación entre tareas activas
+        reference_ids = active_id_sets[0]
+        for id_set in active_id_sets[1:]:
+            if reference_ids != id_set:
+                raise ValueError(
+                    f"config_id mismatch entre tareas activas: "
+                    f"{reference_ids.symmetric_difference(id_set)}"
+                )
+
+        config_ids = sorted(reference_ids)
         n = len(config_ids)
 
-        # --- Verificar base estadística uniforme entre tareas ---
+        # --- Verificar base estadística uniforme entre tareas activas ---
         asymmetric = []
         for cid in config_ids:
-            ns_n10 = n10_by_id[cid].n_seeds
-            ns_mg  = mg_by_id[cid].n_seeds
-            ns_mc  = mc_by_id[cid].n_seeds
-            if not (ns_n10 == ns_mg == ns_mc):
-                asymmetric.append(
-                    f"{cid}: narma10={ns_n10}, mackey_glass={ns_mg}, mc={ns_mc}"
-                )
+            seed_counts = {}
+            if "narma10" in enabled and n10_by_id:
+                seed_counts["narma10"] = n10_by_id[cid].n_seeds
+            if "mackey_glass" in enabled and mg_by_id:
+                seed_counts["mackey_glass"] = mg_by_id[cid].n_seeds
+            if "memory_capacity" in enabled and mc_by_id:
+                seed_counts["memory_capacity"] = mc_by_id[cid].n_seeds
+            if len(set(seed_counts.values())) > 1:
+                asymmetric.append(f"{cid}: " + ", ".join(f"{k}={v}" for k, v in seed_counts.items()))
         if asymmetric:
             raise ValueError(
                 "Base estadística asimétrica entre tareas — no se puede construir el ranking. "
                 "Configs afectadas:\n" + "\n".join(asymmetric)
             )
 
-        # --- Extraer métricas primarias ---
-        n10_spec = self._ranking_config["narma10"]
-        mg_spec  = self._ranking_config["mackey_glass"]
-        mc_spec  = self._ranking_config["memory_capacity"]
+        # --- Extraer métricas primarias y calcular ranks para tareas activas ---
+        rank_arrays: dict[str, "np.ndarray"] = {}
 
-        primary_n10 = np.array([n10_by_id[cid].val_mean[n10_spec.metric] for cid in config_ids])
-        primary_mg  = np.array([mg_by_id[cid].val_mean[mg_spec.metric]   for cid in config_ids])
-        primary_mc  = np.array([mc_by_id[cid].mc_total_mean               for cid in config_ids])
+        if "narma10" in enabled and n10_by_id:
+            n10_spec = self._ranking_config["narma10"]
+            primary_n10 = np.array([n10_by_id[cid].val_mean[n10_spec.metric] for cid in config_ids])
+            rank_arrays["narma10"] = self._rank(primary_n10, n10_spec.direction)
 
-        # --- Calcular ranks (1 = mejor) ---
-        ranks_n10 = self._rank(primary_n10, n10_spec.direction)
-        ranks_mg  = self._rank(primary_mg,  mg_spec.direction)
-        ranks_mc  = self._rank(primary_mc,  mc_spec.direction)
+        if "mackey_glass" in enabled and mg_by_id:
+            mg_spec = self._ranking_config["mackey_glass"]
+            primary_mg = np.array([mg_by_id[cid].val_mean[mg_spec.metric] for cid in config_ids])
+            rank_arrays["mackey_glass"] = self._rank(primary_mg, mg_spec.direction)
 
-        # --- aggregate_rank = media aritmética de los tres ranks ---
-        agg_ranks = (ranks_n10 + ranks_mg + ranks_mc) / 3.0
+        if "memory_capacity" in enabled and mc_by_id:
+            mc_spec = self._ranking_config["memory_capacity"]
+            primary_mc = np.array([mc_by_id[cid].mc_total_mean for cid in config_ids])
+            rank_arrays["memory_capacity"] = self._rank(primary_mc, mc_spec.direction)
+
+        # --- aggregate_rank = media aritmética de los ranks de tareas activas ---
+        if rank_arrays:
+            agg_ranks = np.mean(list(rank_arrays.values()), axis=0)
+        else:
+            agg_ranks = np.zeros(n)
 
         # --- Construir entradas ---
+        # Obtener n_seeds desde la primera tarea activa disponible
+        def _n_seeds_for(cid: str) -> int:
+            if "narma10" in enabled and n10_by_id:
+                return n10_by_id[cid].n_seeds
+            if "mackey_glass" in enabled and mg_by_id:
+                return mg_by_id[cid].n_seeds
+            if "memory_capacity" in enabled and mc_by_id:
+                return mc_by_id[cid].n_seeds
+            return 0
+
+        def _config_point_for(cid: str) -> dict:
+            if "narma10" in enabled and n10_by_id:
+                return n10_by_id[cid].config_point
+            if "mackey_glass" in enabled and mg_by_id:
+                return mg_by_id[cid].config_point
+            if "memory_capacity" in enabled and mc_by_id:
+                return mc_by_id[cid].config_point
+            return {}
+
+        _nan = float("nan")
         entries: list[MultiTaskConfigEntry] = []
         for i, cid in enumerate(config_ids):
-            n10c = n10_by_id[cid]
-            mgc  = mg_by_id[cid]
-            mcc  = mc_by_id[cid]
+            n10_spec = self._ranking_config.get("narma10")
+            mg_spec  = self._ranking_config.get("mackey_glass")
+
+            # narma10 fields
+            if "narma10" in enabled and n10_by_id and n10_spec:
+                n10c = n10_by_id[cid]
+                narma10_primary_metric = n10_spec.metric
+                narma10_val_mean  = n10c.val_mean[n10_spec.metric]
+                narma10_val_std   = n10c.val_std[n10_spec.metric]
+                narma10_test_mean = n10c.test_mean[n10_spec.metric]
+                narma10_test_std  = n10c.test_std[n10_spec.metric]
+                rank_narma10      = int(rank_arrays["narma10"][i])
+            else:
+                narma10_primary_metric = None
+                narma10_val_mean = narma10_val_std = narma10_test_mean = narma10_test_std = None
+                rank_narma10 = None
+
+            # mackey_glass fields
+            if "mackey_glass" in enabled and mg_by_id and mg_spec:
+                mgc = mg_by_id[cid]
+                mg_primary_metric = mg_spec.metric
+                mg_val_mean  = mgc.val_mean[mg_spec.metric]
+                mg_val_std   = mgc.val_std[mg_spec.metric]
+                mg_test_mean = mgc.test_mean[mg_spec.metric]
+                mg_test_std  = mgc.test_std[mg_spec.metric]
+                rank_mg      = int(rank_arrays["mackey_glass"][i])
+            else:
+                mg_primary_metric = None
+                mg_val_mean = mg_val_std = mg_test_mean = mg_test_std = None
+                rank_mg = None
+
+            # memory_capacity fields
+            if "memory_capacity" in enabled and mc_by_id:
+                mcc = mc_by_id[cid]
+                mc_total_mean = mcc.mc_total_mean
+                mc_total_std  = mcc.mc_total_std
+                rank_mc       = int(rank_arrays["memory_capacity"][i])
+            else:
+                mc_total_mean = mc_total_std = None
+                rank_mc = None
+
             entries.append(MultiTaskConfigEntry(
                 config_id=cid,
-                config_point=n10c.config_point,
-                n_seeds=n10c.n_seeds,
-                narma10_primary_metric=n10_spec.metric,
-                narma10_val_mean=n10c.val_mean[n10_spec.metric],
-                narma10_val_std=n10c.val_std[n10_spec.metric],
-                narma10_test_mean=n10c.test_mean[n10_spec.metric],
-                narma10_test_std=n10c.test_std[n10_spec.metric],
-                mg_primary_metric=mg_spec.metric,
-                mg_val_mean=mgc.val_mean[mg_spec.metric],
-                mg_val_std=mgc.val_std[mg_spec.metric],
-                mg_test_mean=mgc.test_mean[mg_spec.metric],
-                mg_test_std=mgc.test_std[mg_spec.metric],
-                mc_total_mean=mcc.mc_total_mean,
-                mc_total_std=mcc.mc_total_std,
-                rank_narma10=int(ranks_n10[i]),
-                rank_mg=int(ranks_mg[i]),
-                rank_mc=int(ranks_mc[i]),
+                config_point=_config_point_for(cid),
+                n_seeds=_n_seeds_for(cid),
+                narma10_primary_metric=narma10_primary_metric,
+                narma10_val_mean=narma10_val_mean,
+                narma10_val_std=narma10_val_std,
+                narma10_test_mean=narma10_test_mean,
+                narma10_test_std=narma10_test_std,
+                mg_primary_metric=mg_primary_metric,
+                mg_val_mean=mg_val_mean,
+                mg_val_std=mg_val_std,
+                mg_test_mean=mg_test_mean,
+                mg_test_std=mg_test_std,
+                mc_total_mean=mc_total_mean,
+                mc_total_std=mc_total_std,
+                rank_narma10=rank_narma10,
+                rank_mg=rank_mg,
+                rank_mc=rank_mc,
                 aggregate_rank=float(agg_ranks[i]),
             ))
 
@@ -320,8 +413,18 @@ class MultiTaskAggregator:
         top_n = min(self._shortlist_top_n, n)
         shortlist = [e.config_id for e in entries[:top_n]]
 
+        # Determinar sweep_name desde el primer summary activo disponible
+        if narma10_summary is not None:
+            base_sweep_name = narma10_summary.sweep_name.replace("_narma10", "")
+        elif mg_summary is not None:
+            base_sweep_name = mg_summary.sweep_name.replace("_mackey_glass", "")
+        elif mc_summary is not None:
+            base_sweep_name = mc_summary.sweep_name
+        else:
+            base_sweep_name = ""
+
         return MultiTaskSweepSummary(
-            sweep_name=narma10_summary.sweep_name.replace("_narma10", ""),
+            sweep_name=base_sweep_name,
             n_configs=n,
             n_seeds=entries[0].n_seeds if entries else 0,
             grid={},   # poblado por el runner
@@ -485,23 +588,38 @@ class MultiTaskSweepRunner:
         """Ejecuta el barrido multi-tarea completo y devuelve el summary."""
         from rc_lab.utils.timing import timer
 
+        enabled_tasks: list[str] = []
+
         # --- Fase 1: NARMA-10 via SweepRunner ---
         from rc_lab.runners.sweep_runner import SweepRunner
-        narma10_cfg = build_subtask_config(self._cfg, "narma10")
-        narma10_summary = SweepRunner(narma10_cfg).run()
+        if self._cfg["tasks"]["narma10"].get("enabled", True):
+            narma10_cfg = build_subtask_config(self._cfg, "narma10")
+            narma10_summary = SweepRunner(narma10_cfg).run()
+            enabled_tasks.append("narma10")
+        else:
+            narma10_summary = None
 
         # --- Fase 2: Mackey-Glass via SweepRunner ---
-        mg_cfg = build_subtask_config(self._cfg, "mackey_glass")
-        mg_summary = SweepRunner(mg_cfg).run()
+        if self._cfg["tasks"]["mackey_glass"].get("enabled", True):
+            mg_cfg = build_subtask_config(self._cfg, "mackey_glass")
+            mg_summary = SweepRunner(mg_cfg).run()
+            enabled_tasks.append("mackey_glass")
+        else:
+            mg_summary = None
 
         # --- Fase 3: Memory Capacity ---
-        mc_runs = self._run_mc_phase()
+        if self._cfg["tasks"]["memory_capacity"].get("enabled", True):
+            mc_runs = self._run_mc_phase()
+            mc_summary = aggregate_mc_results(mc_runs, self._sweep_name)
+            enabled_tasks.append("memory_capacity")
+        else:
+            mc_summary = None
 
         # --- Fase 4: Agregación y persistencia ---
-        mc_summary = aggregate_mc_results(mc_runs, self._sweep_name)
         aggregator = MultiTaskAggregator(
             ranking_config=self._ranking_config,
             shortlist_top_n=self._shortlist_top_n,
+            enabled_tasks=enabled_tasks,
         )
         mt_summary = aggregator.aggregate(narma10_summary, mg_summary, mc_summary)
 
@@ -516,6 +634,7 @@ class MultiTaskSweepRunner:
             shortlist=mt_summary.shortlist,
             shortlist_top_n=mt_summary.shortlist_top_n,
             timestamp=mt_summary.timestamp,
+            enabled_tasks=enabled_tasks,
         )
 
         from rc_lab.utils.io import save_multitask_summary
@@ -542,6 +661,9 @@ class MultiTaskSweepRunner:
         config_points = self._expand_grid()
         mc_runs: list[MCRunResult] = []
 
+        # Obtener transient_kmax desde el bloque diagnostics de la config
+        transient_kmax: int = self._cfg.get("diagnostics", {}).get("transient_kmax", 50)
+
         for config_point in config_points:
             config_id = make_config_id(config_point)
             for seed in self._seeds:
@@ -561,7 +683,7 @@ class MultiTaskSweepRunner:
                 reservoir_builder = resolve_reservoir(res_params)
                 N = self._res_cfg["N"]
                 matrices = reservoir_builder.build(N=N, n_inputs=1, seed=seed)
-                diag = _reservoir_diagnostics(matrices.W)
+                diag = _reservoir_diagnostics(matrices.W, transient_kmax=transient_kmax)
 
                 leak_rate = config_point.get("leak_rate", 1.0)
                 esn = ESNModel(
