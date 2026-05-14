@@ -1,0 +1,101 @@
+sweep:
+  name: multiscale_comparison
+  output_dir: results/multiscale_comparison
+  seeds: [42, 123, 456, 789, 2025]
+
+designs:
+  - name: random_sparse_baseline
+    reservoir:
+      type: random_sparse
+      N: 100
+      sparsity: 0.9
+      bias_scaling: 0.0
+
+  - name: cycle_jump_j7
+    reservoir:
+      type: cycle_jump
+      N: 100
+      jumps: [7]
+      jump_weight: 0.3
+      cycle_weight: 1.0
+      bias_scaling: 0.0
+
+  - name: multiscale_two_random
+    reservoir:
+      type: multiscale
+      N: 100
+      preset: two_scale_random
+      sparsity: 0.9
+      coupling_strength: 0.02
+      coupling_density: 0.1
+      coupling_mode: adjacent
+      coupling_direction: bidirectional
+      bias_scaling: 0.0
+
+  - name: multiscale_three_random
+    reservoir:
+      type: multiscale
+      N: 100
+      preset: three_scale_random
+      sparsity: 0.9
+      coupling_strength: 0.02
+      coupling_density: 0.1
+      coupling_mode: adjacent
+      coupling_direction: bidirectional
+      bias_scaling: 0.0
+
+grid:
+  spectral_radius: [0.9]
+  input_scaling: [0.10, 0.15, 0.20]
+  leak_rate: [0.9, 1.0]
+
+tasks:
+  narma10:
+    enabled: true
+    n_train: 3000
+    n_val: 1000
+    n_test: 1500
+    washout: 200
+    state_policy: reset
+
+  mackey_glass:
+    enabled: false
+    n_train: 3000
+    n_val: 1000
+    n_test: 1500
+    washout: 200
+    state_policy: reset
+    tau: 17
+    dt: 0.1
+
+  memory_capacity:
+    enabled: true
+    washout: 200
+    input_length: 5000
+    fit_fraction: 0.5
+    kmax: 200
+    ridge_param: 1.0e-6
+
+readout:
+  type: ridge
+  features: states
+  ridge_candidates: [1.0e-10, 1.0e-8, 1.0e-6, 1.0e-4, 1.0e-2, 1.0]
+
+metrics:
+  - nmse
+  - rmse
+
+ranking:
+  shortlist_top_n: 10
+  narma10:
+    metric: nmse
+    direction: min
+  mackey_glass:
+    metric: nmse
+    direction: min
+  memory_capacity:
+    metric: mc_total
+    direction: max
+
+diagnostics:
+  transient_kmax: 50
