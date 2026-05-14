@@ -35,6 +35,16 @@ def resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None =
         return MackeyGlassTask(
             tau=task_cfg.get("tau", 17),
             dt=task_cfg.get("dt", 0.1),
+            beta=task_cfg.get("beta", 0.2),
+            gamma=task_cfg.get("gamma", 0.1),
+            n=task_cfg.get("n", 10),
+            prediction_horizon=task_cfg.get("prediction_horizon", 1),
+            sample_stride=task_cfg.get("sample_stride", 1),
+            discard_transient=task_cfg.get("discard_transient", 0),
+            initial_history=task_cfg.get("initial_history", "constant"),
+            history_value=task_cfg.get("history_value", 0.9),
+            history_low=task_cfg.get("history_low", 1.1),
+            history_high=task_cfg.get("history_high", 1.3),
             state_policy=state_policy,
         )
 
