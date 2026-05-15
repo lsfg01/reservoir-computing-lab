@@ -675,10 +675,14 @@ class MultiTaskSweepRunner:
                 # llamar a resolve_reservoir.
                 res_params = {
                     **self._res_cfg,
-                    "spectral_radius": config_point["spectral_radius"],
-                    "input_scaling": config_point["input_scaling"],
+                    **{
+                        k: v
+                        for k, v in config_point.items()
+                        if k not in ("leak_rate", "ridge_param")
+                    },
                 }
                 res_params.pop("leak_rate", None)
+                res_params.pop("ridge_param", None)
 
                 reservoir_builder = resolve_reservoir(res_params)
                 N = self._res_cfg["N"]

@@ -23,6 +23,14 @@ def make_json_safe(obj: Any) -> Any:
         return {k: make_json_safe(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [make_json_safe(v) for v in obj]
+    try:
+        import numpy as np
+        if isinstance(obj, np.ndarray):
+            return make_json_safe(obj.tolist())
+        if isinstance(obj, np.generic):
+            return make_json_safe(obj.item())
+    except ImportError:
+        pass
     if isinstance(obj, float) and not math.isfinite(obj):
         return None
     return obj
@@ -107,34 +115,51 @@ def save_sweep_summary(summary: Any, output_dir: str | Path) -> tuple[Path, Path
 
     # CSV plano
     csv_path = output_dir / "summary.csv"
-    fieldnames = [
-        "config_id",
-        "spectral_radius",
-        "input_scaling",
-        "leak_rate",
-        "best_ridge_mode",
-        "val_nmse_mean",
-        "val_nmse_std",
-        "test_nmse_mean",
-        "test_nmse_std",
-        "n_seeds",
-    ]
+    grid_keys: list[str] = []
+    metric_keys: list[str] = []
+    for cfg in summary.configs:
+        for key in cfg.config_point:
+            if key not in grid_keys:
+                grid_keys.append(key)
+        for key in cfg.val_mean:
+            if key not in metric_keys:
+                metric_keys.append(key)
+        for key in cfg.test_mean:
+            if key not in metric_keys:
+                metric_keys.append(key)
+
+    fieldnames = ["config_id"] + grid_keys + ["best_ridge_mode"]
+    for metric in metric_keys:
+        fieldnames.extend([
+            f"val_{metric}_mean",
+            f"val_{metric}_std",
+            f"test_{metric}_mean",
+            f"test_{metric}_std",
+        ])
+    fieldnames.append("n_seeds")
+
+    def _csv_value(value: Any) -> Any:
+        safe = make_json_safe(value)
+        if isinstance(safe, (list, dict)):
+            return json.dumps(safe, ensure_ascii=False, allow_nan=False)
+        return safe if safe is not None else ""
+
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for cfg in summary.configs:
             row = {
                 "config_id": cfg.config_id,
-                "spectral_radius": cfg.config_point.get("spectral_radius", ""),
-                "input_scaling": cfg.config_point.get("input_scaling", ""),
-                "leak_rate": cfg.config_point.get("leak_rate", ""),
                 "best_ridge_mode": cfg.best_ridge_mode,
-                "val_nmse_mean": cfg.val_mean.get("nmse", ""),
-                "val_nmse_std": cfg.val_std.get("nmse", ""),
-                "test_nmse_mean": cfg.test_mean.get("nmse", ""),
-                "test_nmse_std": cfg.test_std.get("nmse", ""),
                 "n_seeds": cfg.n_seeds,
             }
+            for key in grid_keys:
+                row[key] = _csv_value(cfg.config_point.get(key, ""))
+            for metric in metric_keys:
+                row[f"val_{metric}_mean"] = _csv_value(cfg.val_mean.get(metric, ""))
+                row[f"val_{metric}_std"] = _csv_value(cfg.val_std.get(metric, ""))
+                row[f"test_{metric}_mean"] = _csv_value(cfg.test_mean.get(metric, ""))
+                row[f"test_{metric}_std"] = _csv_value(cfg.test_std.get(metric, ""))
             writer.writerow(row)
 
     return json_path, csv_path

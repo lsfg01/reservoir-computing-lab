@@ -4,6 +4,7 @@ import numpy as np
 
 from rc_lab.models.esn import ESNModel
 from rc_lab.readouts.ridge import RidgeReadout
+from rc_lab.tasks.delay_recall import build_delay_recall_targets, delay_recall_valid_start
 
 
 @dataclass
@@ -107,9 +108,9 @@ class MemoryCapacityEvaluator:
         # X[t] = estado del reservoir en el paso t + kmax_eff (post-washout)
         # Y[t, k-1] = u(t + kmax_eff - k) = u retardado k pasos respecto a X[t]
         X = X_all[kmax_eff : kmax_eff + T_valid]          # (T_valid, N)
-        Y = np.empty((T_valid, kmax_eff))
-        for k in range(1, kmax_eff + 1):
-            Y[:, k - 1] = u_post[kmax_eff - k : kmax_eff - k + T_valid]
+        valid_start = delay_recall_valid_start(self.washout, kmax_eff)
+        Y_full = build_delay_recall_targets(u, kmax_eff)
+        Y = Y_full[valid_start : valid_start + T_valid]
 
         # Split secuencial fit / eval
         n_fit = max(1, int(T_valid * self.fit_fraction))

@@ -5,6 +5,13 @@ from typing import Any, Literal
 import numpy as np
 
 from rc_lab.metrics.error import nmse, rmse
+from rc_lab.metrics.memory import (
+    corr2_by_delay,
+    max_delay_corr_above_threshold,
+    memory_corr_total,
+    memory_eff_total,
+    nmse_by_delay,
+)
 from rc_lab.models.esn import ESNModel
 from rc_lab.readouts.ridge import RidgeReadout, build_readout_features
 from rc_lab.reservoirs.base import BaseReservoirBuilder
@@ -30,6 +37,15 @@ def resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None =
     if name == "narma10":
         return Narma10Task(state_policy=state_policy)
 
+    if name == "delay_recall":
+        from rc_lab.tasks.delay_recall import DelayRecallTask
+        return DelayRecallTask(
+            kmax=task_cfg.get("kmax", 100),
+            input_low=task_cfg.get("input_low", -1.0),
+            input_high=task_cfg.get("input_high", 1.0),
+            state_policy=state_policy,
+        )
+
     if name == "mackey_glass":
         from rc_lab.tasks.mackey_glass import MackeyGlassTask
         return MackeyGlassTask(
@@ -48,7 +64,7 @@ def resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None =
             state_policy=state_policy,
         )
 
-    raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['narma10', 'mackey_glass']")
+    raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['delay_recall', 'narma10', 'mackey_glass']")
 
 
 def resolve_reservoir(reservoir_cfg: dict[str, Any]) -> BaseReservoirBuilder:
@@ -101,6 +117,11 @@ class RunResult:
 _METRIC_FNS = {
     "nmse": nmse,
     "rmse": rmse,
+    "corr2_by_delay": corr2_by_delay,
+    "nmse_by_delay": nmse_by_delay,
+    "memory_corr_total": memory_corr_total,
+    "memory_eff_total": memory_eff_total,
+    "max_delay_corr_above_threshold": max_delay_corr_above_threshold,
 }
 
 

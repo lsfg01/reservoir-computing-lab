@@ -9,6 +9,13 @@ from typing import Any, Literal
 import numpy as np
 
 from rc_lab.metrics.error import nmse, rmse
+from rc_lab.metrics.memory import (
+    corr2_by_delay,
+    max_delay_corr_above_threshold,
+    memory_corr_total,
+    memory_eff_total,
+    nmse_by_delay,
+)
 from rc_lab.models.esn import ESNModel
 from rc_lab.readouts.ridge import RidgeReadout, build_readout_features
 from rc_lab.readouts.ridge_sweep import RidgeParamSelector, RidgeSelectionResult
@@ -20,7 +27,15 @@ from rc_lab.utils.timing import timer
 
 ReadoutMode = Literal["states", "extended"]
 
-_METRIC_FNS = {"nmse": nmse, "rmse": rmse}
+_METRIC_FNS = {
+    "nmse": nmse,
+    "rmse": rmse,
+    "corr2_by_delay": corr2_by_delay,
+    "nmse_by_delay": nmse_by_delay,
+    "memory_corr_total": memory_corr_total,
+    "memory_eff_total": memory_eff_total,
+    "max_delay_corr_above_threshold": max_delay_corr_above_threshold,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -78,12 +93,20 @@ def make_config_id(config_point: dict[str, Any]) -> str:
 def _resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None = None) -> BaseTask:
     from rc_lab.tasks.narma10 import Narma10Task
     from rc_lab.tasks.mackey_glass import MackeyGlassTask
+    from rc_lab.tasks.delay_recall import DelayRecallTask
 
     if task_cfg is None:
         task_cfg = {}
 
     if name == "narma10":
         return Narma10Task(state_policy=state_policy)
+    elif name == "delay_recall":
+        return DelayRecallTask(
+            kmax=task_cfg.get("kmax", 100),
+            input_low=task_cfg.get("input_low", -1.0),
+            input_high=task_cfg.get("input_high", 1.0),
+            state_policy=state_policy,
+        )
     elif name == "mackey_glass":
         return MackeyGlassTask(
             tau=task_cfg.get("tau", 17),
@@ -101,7 +124,7 @@ def _resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None 
             state_policy=state_policy,
         )
     else:
-        raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['narma10', 'mackey_glass']")
+        raise ValueError(f"Tarea desconocida: {name!r}. Disponibles: ['delay_recall', 'narma10', 'mackey_glass']")
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +171,8 @@ class SweepRunner:
         self._readout_mode: ReadoutMode = readout_cfg.get("features", "states")
 
         self._metric_names: list[str] = sweep_config.get("metrics", ["nmse"])
-        self._primary_metric: str = self._task.primary_metric
+        self._primary_metric: str = sweep_config.get("primary_metric", self._task.primary_metric)
+        self._primary_direction: str = sweep_config.get("primary_direction", "min")
         self._transient_kmax: int = sweep_config.get("diagnostics", {}).get("transient_kmax", 50)
 
     # ------------------------------------------------------------------
@@ -181,6 +205,7 @@ class SweepRunner:
             sweep_name=self._sweep_name,
             task_name=self._task_name,
             primary_metric=self._primary_metric,
+            primary_direction=self._primary_direction,
         )
         self._save_summary(summary)
         return summary
@@ -204,6 +229,7 @@ class SweepRunner:
         task_data: TaskData,
     ) -> SweepRunResult:
         timing: dict[str, float] = {}
+        washout = task_data.washout
 
         with timer() as t_total:
             # Construir reservoir dinámicamente según el tipo configurado.
@@ -212,11 +238,15 @@ class SweepRunner:
             # vienen del bloque reservoir del YAML.
             res_params = {
                 **self._res_cfg,
-                "spectral_radius": config_point["spectral_radius"],
-                "input_scaling": config_point["input_scaling"],
+                **{
+                    k: v
+                    for k, v in config_point.items()
+                    if k not in ("leak_rate", "ridge_param")
+                },
             }
             # leak_rate pertenece a ESNModel, no al builder de matrices.
             res_params.pop("leak_rate", None)
+            res_params.pop("ridge_param", None)
 
             reservoir_builder = resolve_reservoir(res_params)
             n_inputs = task_data.u_train.shape[1]
@@ -229,13 +259,13 @@ class SweepRunner:
             # Estados train (washout incluido en u_train)
             with timer() as t_train:
                 X_train, x_end_train = esn.run_states(
-                    task_data.u_train, washout=self._washout
+                    task_data.u_train, washout=washout
                 )
             timing["train_states_s"] = t_train["elapsed"]
 
             # Y_train puntuado: descartar los primeros washout pasos
-            u_train_post = task_data.u_train[self._washout:]
-            Y_train = task_data.y_train[self._washout:]
+            u_train_post = task_data.u_train[washout:]
+            Y_train = task_data.y_train[washout:]
 
             # Estados val y test — bifurcación por semántica de TaskData
             assert task_data.u_val is not None and task_data.y_val is not None
@@ -243,10 +273,10 @@ class SweepRunner:
             if task_data.u_val_full is not None:
                 # reset: cada split tiene su propio warmup de longitud washout
                 X_val, _ = esn.run_states(
-                    task_data.u_val_full, washout=self._washout, x0=None
+                    task_data.u_val_full, washout=washout, x0=None
                 )
                 X_test, _ = esn.run_states(
-                    task_data.u_test_full, washout=self._washout, x0=None
+                    task_data.u_test_full, washout=washout, x0=None
                 )
             else:
                 # carryover: estado continuo desde train
@@ -270,7 +300,12 @@ class SweepRunner:
 
             # Selección de ridge_param por validación
             with timer() as t_ridge:
-                selector = RidgeParamSelector(self._ridge_candidates)
+                ridge_candidates = (
+                    [config_point["ridge_param"]]
+                    if "ridge_param" in config_point
+                    else self._ridge_candidates
+                )
+                selector = RidgeParamSelector(ridge_candidates)
                 ridge_result: RidgeSelectionResult = selector.select(
                     F_train, Y_train, F_val, Y_val
                 )

@@ -1,0 +1,151 @@
+sweep:
+  name: external_esn_vs_rnn_lstm
+  output_dir: results/external_esn_vs_rnn_lstm
+  seeds: [42, 123, 456, 789, 1001]
+
+comparison:
+  n_candidates_per_model: 16
+  allow_unequal_candidate_counts: false
+  use_test_for_selection: false
+  device: cpu
+
+models:
+  - name: random_sparse
+    kind: esn
+    reservoir:
+      type: random_sparse
+      N: 100
+      sparsity: 0.9
+      bias_scaling: 0.0
+    grid:
+      spectral_radius: [0.8, 1.0]
+      input_scaling: [0.1, 0.2]
+      leak_rate: [0.5, 1.0]
+      ridge_param: [1.0e-6, 1.0e-4]
+
+  - name: cycle_jump
+    kind: esn
+    reservoir:
+      type: cycle_jump
+      N: 100
+      jumps: [7]
+      jump_weight: 0.3
+      cycle_weight: 1.0
+      bias_scaling: 0.0
+    grid:
+      spectral_radius: [0.8, 1.0]
+      input_scaling: [0.1, 0.2]
+      leak_rate: [0.5, 1.0]
+      ridge_param: [1.0e-6, 1.0e-4]
+
+  - name: nonnormal_chain
+    kind: esn
+    reservoir:
+      type: nonnormal_chain
+      N: 100
+      bias_scaling: 0.0
+    grid:
+      spectral_radius: [0.8, 1.0]
+      input_scaling: [0.1, 0.2]
+      leak_rate: [0.5, 1.0]
+      chain_strength: [0.1, 0.3]
+      ridge_param: [1.0e-6]
+
+  - name: simple_rnn
+    kind: torch_simple_rnn
+    grid:
+      hidden_size: [32, 64]
+      learning_rate: [1.0e-3, 5.0e-4]
+      weight_decay: [0.0, 1.0e-4]
+      num_layers: [1]
+      max_epochs: [50]
+      patience: [5, 10]
+
+  - name: lstm
+    kind: torch_lstm
+    grid:
+      hidden_size: [32, 64]
+      learning_rate: [1.0e-3, 5.0e-4]
+      weight_decay: [0.0, 1.0e-4]
+      num_layers: [1, 2]
+      dropout: [0.0]
+      max_epochs: [50]
+      patience: [5]
+
+  - name: tapped_delay_ridge
+    kind: tapped_delay_ridge
+    grid:
+      n_lags: [10, 25, 50, 100]
+      ridge_param: [1.0e-6, 1.0e-4]
+      feature_mode: [raw, quadratic]
+
+tasks:
+  delay_recall:
+    enabled: true
+    name: delay_recall
+    n_train: 3000
+    n_val: 1000
+    n_test: 1000
+    washout: 200
+    kmax: 100
+    input_low: -1.0
+    input_high: 1.0
+    state_policy: reset
+
+  narma10:
+    enabled: true
+    name: narma10
+    n_train: 3000
+    n_val: 1000
+    n_test: 1000
+    washout: 200
+    state_policy: reset
+
+  mackey_glass:
+    enabled: true
+    name: mackey_glass
+    n_train: 3000
+    n_val: 1000
+    n_test: 1500
+    washout: 200
+    state_policy: reset
+    tau: 17
+    dt: 0.1
+    beta: 0.2
+    gamma: 0.1
+    n: 10
+    initial_history: random_uniform
+    history_low: 1.1
+    history_high: 1.3
+    discard_transient: 1000
+    sample_stride: 10
+    prediction_horizon: 84
+
+readout:
+  type: ridge
+  features: states
+  ridge_candidates: [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3]
+
+metrics:
+  common: [nmse, rmse]
+  memory:
+    - memory_corr_total
+    - memory_eff_total
+    - corr2_by_delay
+    - nmse_by_delay
+    - max_delay_corr_above_threshold
+
+ranking:
+  delay_recall:
+    metric: memory_corr_total
+    direction: max
+  narma10:
+    metric: nmse
+    direction: min
+  mackey_glass:
+    metric: nmse
+    direction: min
+
+diagnostics:
+  transient_kmax: 150
+

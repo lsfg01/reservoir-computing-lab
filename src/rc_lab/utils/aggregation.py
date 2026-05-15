@@ -11,6 +11,7 @@ def aggregate_sweep_results(
     sweep_name: str,
     task_name: str,
     primary_metric: str = "nmse",
+    primary_direction: str = "min",
 ) -> SweepSummary:
     """
     Agrupa resultados por config_id, calcula media y std sobre seeds.
@@ -32,18 +33,10 @@ def aggregate_sweep_results(
         val_keys = list(runs[0].val_metrics.keys())
         test_keys = list(runs[0].test_metrics.keys())
 
-        val_mean = {
-            k: float(np.mean([r.val_metrics[k] for r in runs])) for k in val_keys
-        }
-        val_std = {
-            k: float(np.std([r.val_metrics[k] for r in runs], ddof=0)) for k in val_keys
-        }
-        test_mean = {
-            k: float(np.mean([r.test_metrics[k] for r in runs])) for k in test_keys
-        }
-        test_std = {
-            k: float(np.std([r.test_metrics[k] for r in runs], ddof=0)) for k in test_keys
-        }
+        val_mean = {k: _mean_metric([r.val_metrics[k] for r in runs]) for k in val_keys}
+        val_std = {k: _std_metric([r.val_metrics[k] for r in runs]) for k in val_keys}
+        test_mean = {k: _mean_metric([r.test_metrics[k] for r in runs]) for k in test_keys}
+        test_std = {k: _std_metric([r.test_metrics[k] for r in runs]) for k in test_keys}
 
         # Moda del best_ridge (valor más frecuente entre seeds)
         ridge_values = [r.best_ridge for r in runs]
@@ -62,10 +55,18 @@ def aggregate_sweep_results(
         ))
 
     # Mejor config por val_mean[primary_metric] — nunca por test
-    best_config_id = min(
-        configs,
-        key=lambda c: c.val_mean.get(primary_metric, float("inf")),
-    ).config_id
+    if primary_direction == "min":
+        best_config_id = min(
+            configs,
+            key=lambda c: _scalar_for_rank(c.val_mean.get(primary_metric, float("inf")), default=float("inf")),
+        ).config_id
+    elif primary_direction == "max":
+        best_config_id = max(
+            configs,
+            key=lambda c: _scalar_for_rank(c.val_mean.get(primary_metric, float("-inf")), default=float("-inf")),
+        ).config_id
+    else:
+        raise ValueError(f"primary_direction debe ser 'min' o 'max', recibido: {primary_direction!r}")
 
     seeds = sorted({r.seed for r in results})
 
@@ -78,6 +79,28 @@ def aggregate_sweep_results(
         best_config_id=best_config_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
+
+
+def _mean_metric(values: list[Any]) -> Any:
+    arr = np.asarray(values, dtype=float)
+    mean = np.mean(arr, axis=0)
+    return float(mean) if np.ndim(mean) == 0 else mean.tolist()
+
+
+def _std_metric(values: list[Any]) -> Any:
+    arr = np.asarray(values, dtype=float)
+    std = np.std(arr, axis=0, ddof=0)
+    return float(std) if np.ndim(std) == 0 else std.tolist()
+
+
+def _scalar_for_rank(value: Any, default: float) -> float:
+    try:
+        arr = np.asarray(value, dtype=float)
+    except (TypeError, ValueError):
+        return default
+    if arr.ndim == 0:
+        return float(arr)
+    return float(np.sum(arr))
 
 
 def results_to_dataframe(results: list[SweepRunResult]) -> dict[str, list[Any]]:
