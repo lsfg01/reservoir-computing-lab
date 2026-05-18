@@ -54,28 +54,44 @@ models:
   - name: simple_rnn
     kind: torch_simple_rnn
     grid:
-      hidden_size: [32, 64]
-      learning_rate: [1.0e-3, 5.0e-4]
-      weight_decay: [0.0, 1.0e-4]
+      hidden_size: [64, 128]
+      learning_rate: [1.0e-3, 3.0e-4]
+      weight_decay: [0.0, 1.0e-5]
+      bptt_length: [100, 200]
+      batch_size: [32]
       num_layers: [1]
-      max_epochs: [50]
-      patience: [5, 10]
+      max_epochs: [150]
+      patience: [20]
+      grad_clip: [1.0]
+      training_mode: [windowed]
+      window_stride: [50]
+      window_washout: [auto]
+      normalize_inputs: [true]
+      normalize_targets: [true]
 
   - name: lstm
     kind: torch_lstm
     grid:
-      hidden_size: [32, 64]
-      learning_rate: [1.0e-3, 5.0e-4]
-      weight_decay: [0.0, 1.0e-4]
-      num_layers: [1, 2]
+      hidden_size: [64, 128]
+      learning_rate: [1.0e-3, 3.0e-4]
+      weight_decay: [0.0, 1.0e-5]
+      bptt_length: [100, 200]
+      batch_size: [32]
+      num_layers: [1]
       dropout: [0.0]
-      max_epochs: [50]
-      patience: [5]
+      max_epochs: [150]
+      patience: [20]
+      grad_clip: [1.0]
+      training_mode: [windowed]
+      window_stride: [50]
+      window_washout: [auto]
+      normalize_inputs: [true]
+      normalize_targets: [true]
 
   - name: tapped_delay_ridge
     kind: tapped_delay_ridge
     grid:
-      n_lags: [10, 25, 50, 100]
+      n_lags: [10, 25, 50, 75]
       ridge_param: [1.0e-6, 1.0e-4]
       feature_mode: [raw, quadratic]
 
@@ -148,4 +164,3 @@ ranking:
 
 diagnostics:
   transient_kmax: 150
-

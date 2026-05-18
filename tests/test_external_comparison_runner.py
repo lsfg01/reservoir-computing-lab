@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 
 from rc_lab.runners.external_comparison_runner import ExternalComparisonRunner, expand_grid
-from rc_lab.runners.sweep_runner import make_config_id
+from rc_lab.runners.sweep_runner import SweepRunResult, make_config_id
+from rc_lab.utils.aggregation import aggregate_sweep_results
 
 
 def _minimal_external_config(tmp_path: Path, *, enable_narma10: bool = False) -> dict:
@@ -133,6 +134,15 @@ def test_external_comparison_smoke_persists_expected_structure(tmp_path):
     data = json.loads((out / "comparison_summary.json").read_text(encoding="utf-8"))
     assert data["enabled_tasks"] == ["delay_recall"]
     assert "best_overall" in data
+    assert data["best_by_model"]["random_sparse"]["selected_total_s_mean"] is not None
+    assert data["best_by_model"]["random_sparse"]["selected_total_s_std"] is not None
+    assert data["best_by_model"]["random_sparse"]["tuning_total_s_sum"] is not None
+    assert data["best_by_model"]["tapped_delay_ridge"]["selected_total_s_mean"] is not None
+    assert data["best_by_model"]["tapped_delay_ridge"]["tuning_total_s_sum"] is not None
+
+    esn_task_summary = json.loads((out / "random_sparse" / "delay_recall" / "summary.json").read_text(encoding="utf-8"))
+    assert esn_task_summary["selected_total_s_mean"] is not None
+    assert esn_task_summary["tuning_total_s_sum"] is not None
 
 
 def test_disabled_tasks_do_not_create_global_columns(tmp_path):
@@ -231,8 +241,224 @@ def test_external_best_aggregate_gets_complete_test_metrics(tmp_path, monkeypatc
     assert comparison["best_overall"]["config_id"] == aggregate_id
     assert "delay_recall_test_memory_corr_total_mean" in comparison["best_overall"]
     assert "narma10_test_nmse_mean" in comparison["best_overall"]
+    assert comparison["best_overall"]["selected_total_s_mean"] is not None
+    assert comparison["best_overall"]["tuning_total_s_sum"] is not None
 
     assert test_calls.count(("delay_recall", 3, "best_aggregate_within_model")) == 1
     assert test_calls.count(("narma10", 3, "best_aggregate_within_model")) == 1
     assert not any(call[1] == 3 and call[2] == "best_aggregate_global" for call in test_calls)
     assert table[0]["config_id"] == aggregate_id
+
+
+def test_missing_run_timings_are_ignored_in_aggregation(tmp_path, monkeypatch):
+    cfg = _minimal_external_config(tmp_path)
+    cfg["sweep"]["seeds"] = [1, 2]
+    cfg["models"] = [
+        {
+            "name": "tapped_delay_ridge",
+            "kind": "tapped_delay_ridge",
+            "grid": {
+                "n_lags": [1, 2],
+                "ridge_param": [1.0e-6],
+                "feature_mode": ["raw"],
+            },
+        }
+    ]
+
+    def fake_run_single(
+        self,
+        model,
+        task_name,
+        config_point,
+        config_id,
+        seed,
+        metric_names,
+        evaluate_test,
+        final_evaluation_reason=None,
+    ):
+        score = 10.0 if config_point["n_lags"] == 1 else 5.0
+        values = {
+            "nmse": 1.0 / score,
+            "memory_corr_total": score,
+            "memory_eff_total": score,
+        }
+        return {
+            "sweep_name": self._sweep_name,
+            "model_name": model["name"],
+            "model_kind": model["kind"],
+            "task_name": task_name,
+            "config_id": config_id,
+            "seed": seed,
+            "config_point": config_point,
+            "val_metrics": {metric: values[metric] for metric in metric_names},
+            "test_metrics": {metric: values[metric] for metric in metric_names} if evaluate_test else {},
+            "timing": {"total_s": 2.0} if seed == 1 else {},
+            "metadata": {"n_total_params": 1, "n_trainable_params": 1},
+            "evaluation_phase": "final_test" if evaluate_test else "validation",
+            "final_evaluation_reason": final_evaluation_reason if evaluate_test else None,
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        }
+
+    monkeypatch.setattr(ExternalComparisonRunner, "_run_external_single", fake_run_single)
+    ExternalComparisonRunner(cfg).run()
+
+    out = Path(cfg["sweep"]["output_dir"])
+    comparison = json.loads((out / "comparison_summary.json").read_text(encoding="utf-8"))
+    best = comparison["best_by_model"]["tapped_delay_ridge"]
+    assert best["selected_total_s_mean"] == 2.0
+    assert best["selected_total_s_std"] == 0.0
+    assert best["tuning_total_s_sum"] > 0.0
+
+
+def test_external_tuning_total_is_preserved_when_final_run_overwrites_selected(tmp_path, monkeypatch):
+    cfg = _minimal_external_config(tmp_path)
+    cfg["sweep"]["seeds"] = [1]
+    cfg["models"] = [
+        {
+            "name": "tapped_delay_ridge",
+            "kind": "tapped_delay_ridge",
+            "grid": {
+                "n_lags": [1, 2],
+                "ridge_param": [1.0e-6],
+                "feature_mode": ["raw"],
+            },
+        }
+    ]
+
+    def fake_run_single(
+        self,
+        model,
+        task_name,
+        config_point,
+        config_id,
+        seed,
+        metric_names,
+        evaluate_test,
+        final_evaluation_reason=None,
+    ):
+        n_lags = config_point["n_lags"]
+        score = 10.0 if n_lags == 1 else 5.0
+        values = {"nmse": 1.0 / score, "memory_corr_total": score, "memory_eff_total": score}
+        if evaluate_test:
+            timing = {
+                "fit_s": 10.0,
+                "final_test_s": 100.0,
+                "test_s": 100.0,
+                "selected_total_s": 110.0,
+                "tuning_s": 999.0,
+                "total_s": 999.0,
+            }
+        else:
+            timing = {
+                "fit_s": float(n_lags),
+                "validation_s": 0.5,
+                "tuning_s": float(n_lags) + 0.5,
+                "total_s": float(n_lags) + 0.5,
+            }
+        return {
+            "sweep_name": self._sweep_name,
+            "model_name": model["name"],
+            "model_kind": model["kind"],
+            "task_name": task_name,
+            "config_id": config_id,
+            "seed": seed,
+            "config_point": config_point,
+            "val_metrics": {metric: values[metric] for metric in metric_names},
+            "test_metrics": {metric: values[metric] for metric in metric_names} if evaluate_test else {},
+            "timing": timing,
+            "metadata": {"n_total_params": 1, "n_trainable_params": 1},
+            "evaluation_phase": "final_test" if evaluate_test else "validation",
+            "final_evaluation_reason": final_evaluation_reason if evaluate_test else None,
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        }
+
+    monkeypatch.setattr(ExternalComparisonRunner, "_run_external_single", fake_run_single)
+    ExternalComparisonRunner(cfg).run()
+
+    out = Path(cfg["sweep"]["output_dir"])
+    comparison = json.loads((out / "comparison_summary.json").read_text(encoding="utf-8"))
+    best = comparison["best_by_model"]["tapped_delay_ridge"]
+    assert best["tuning_total_s_sum"] == pytest.approx(4.0)
+    assert best["selected_fit_s_mean"] == pytest.approx(10.0)
+    assert best["selected_test_s_mean"] == pytest.approx(100.0)
+    assert best["selected_total_s_mean"] == pytest.approx(110.0)
+    assert best["diagnostic_total_s_sum"] == pytest.approx(1003.0)
+
+
+def test_esn_common_timings_use_validation_tuning_not_raw_total():
+    runs = [
+        SweepRunResult(
+            sweep_name="esn_timing",
+            config_id="best",
+            seed=1,
+            config_point={"spectral_radius": 0.9},
+            best_ridge=1.0e-6,
+            val_curve={},
+            val_metrics={"memory_corr_total": 2.0},
+            test_metrics={"memory_corr_total": 2.1},
+            timing={
+                "fit_s": 4.0,
+                "test_s": 1.0,
+                "final_test_s": 1.0,
+                "selected_total_s": 5.0,
+                "tuning_s": 4.0,
+                "total_s": 100.0,
+            },
+            timestamp="2026-01-01T00:00:00+00:00",
+        ),
+        SweepRunResult(
+            sweep_name="esn_timing",
+            config_id="other",
+            seed=1,
+            config_point={"spectral_radius": 0.7},
+            best_ridge=1.0e-6,
+            val_curve={},
+            val_metrics={"memory_corr_total": 1.0},
+            test_metrics={"memory_corr_total": 1.1},
+            timing={
+                "fit_s": 6.0,
+                "test_s": 2.0,
+                "final_test_s": 2.0,
+                "selected_total_s": 8.0,
+                "tuning_s": 6.0,
+                "total_s": 200.0,
+            },
+            timestamp="2026-01-01T00:00:00+00:00",
+        ),
+    ]
+
+    summary = aggregate_sweep_results(
+        runs,
+        sweep_name="esn_timing",
+        task_name="delay_recall",
+        primary_metric="memory_corr_total",
+        primary_direction="max",
+    )
+
+    assert summary.best_config_id == "best"
+    assert summary.tuning_total_s_sum == pytest.approx(10.0)
+    assert summary.selected_fit_s_mean == pytest.approx(4.0)
+    assert summary.selected_test_s_mean == pytest.approx(1.0)
+    assert summary.selected_total_s_mean == pytest.approx(5.0)
+    assert summary.diagnostic_total_s_sum == pytest.approx(300.0)
+
+
+def test_main_external_config_tapped_delay_is_limited_and_counts_match():
+    import yaml
+
+    cfg = yaml.safe_load(Path("configs/external/esn_vs_rnn_lstm.yaml").read_text(encoding="utf-8"))
+    ExternalComparisonRunner(cfg)
+
+    target = cfg["comparison"]["n_candidates_per_model"]
+    by_name = {model["name"]: model for model in cfg["models"]}
+    tapped = by_name["tapped_delay_ridge"]
+    assert 100 not in tapped["grid"]["n_lags"]
+    assert len(expand_grid(tapped["grid"])) == target == 16
+
+    for name in ("simple_rnn", "lstm"):
+        grid = by_name[name]["grid"]
+        assert len(expand_grid(grid)) == target
+        assert grid["num_layers"] == [1]
+        assert grid["training_mode"] == ["windowed"]
+        assert grid["normalize_inputs"] == [True]
+        assert grid["normalize_targets"] == [True]

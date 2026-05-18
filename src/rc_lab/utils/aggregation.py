@@ -37,6 +37,9 @@ def aggregate_sweep_results(
         val_std = {k: _std_metric([r.val_metrics[k] for r in runs]) for k in val_keys}
         test_mean = {k: _mean_metric([r.test_metrics[k] for r in runs]) for k in test_keys}
         test_std = {k: _std_metric([r.test_metrics[k] for r in runs]) for k in test_keys}
+        timing_mean = _aggregate_timing(runs, np.mean)
+        timing_std = _aggregate_timing(runs, np.std)
+        timing_sum = _aggregate_timing(runs, np.sum)
 
         # Moda del best_ridge (valor más frecuente entre seeds)
         ridge_values = [r.best_ridge for r in runs]
@@ -52,6 +55,9 @@ def aggregate_sweep_results(
             test_mean=test_mean,
             test_std=test_std,
             best_ridge_mode=best_ridge_mode,
+            timing_mean=timing_mean,
+            timing_std=timing_std,
+            timing_sum=timing_sum,
         ))
 
     # Mejor config por val_mean[primary_metric] — nunca por test
@@ -69,6 +75,27 @@ def aggregate_sweep_results(
         raise ValueError(f"primary_direction debe ser 'min' o 'max', recibido: {primary_direction!r}")
 
     seeds = sorted({r.seed for r in results})
+    best_config = next(c for c in configs if c.config_id == best_config_id)
+    selected_fit_s_mean = best_config.timing_mean.get("fit_s")
+    selected_fit_s_std = best_config.timing_std.get("fit_s")
+    selected_test_s_mean = _first_timing(best_config.timing_mean, ["test_s", "final_test_s"])
+    selected_test_s_std = _first_timing(best_config.timing_std, ["test_s", "final_test_s"])
+    selected_total_s_mean, selected_total_s_std = _combine_fit_test(
+        selected_fit_s_mean,
+        selected_fit_s_std,
+        selected_test_s_mean,
+        selected_test_s_std,
+        best_config.timing_mean.get("selected_total_s"),
+        best_config.timing_std.get("selected_total_s"),
+    )
+    tuning_total_s_sum = _sum_available(
+        cfg.timing_sum.get("tuning_s")
+        for cfg in configs
+    )
+    diagnostic_total_s_sum = _sum_available(
+        cfg.timing_sum.get("total_s")
+        for cfg in configs
+    )
 
     return SweepSummary(
         sweep_name=sweep_name,
@@ -78,6 +105,14 @@ def aggregate_sweep_results(
         configs=configs,
         best_config_id=best_config_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
+        selected_fit_s_mean=selected_fit_s_mean,
+        selected_fit_s_std=selected_fit_s_std,
+        selected_test_s_mean=selected_test_s_mean,
+        selected_test_s_std=selected_test_s_std,
+        selected_total_s_mean=selected_total_s_mean,
+        selected_total_s_std=selected_total_s_std,
+        tuning_total_s_sum=tuning_total_s_sum,
+        diagnostic_total_s_sum=diagnostic_total_s_sum,
     )
 
 
@@ -101,6 +136,67 @@ def _scalar_for_rank(value: Any, default: float) -> float:
     if arr.ndim == 0:
         return float(arr)
     return float(np.sum(arr))
+
+
+def _aggregate_timing(
+    runs: list[SweepRunResult],
+    reducer: Any,
+) -> dict[str, float]:
+    keys = sorted({
+        key
+        for run in runs
+        for key, value in run.timing.items()
+        if _is_finite_number(value)
+    })
+    out: dict[str, float] = {}
+    for key in keys:
+        values = [
+            float(run.timing[key])
+            for run in runs
+            if _is_finite_number(run.timing.get(key))
+        ]
+        if values:
+            out[key] = float(reducer(values))
+    return out
+
+
+def _sum_available(values: Any) -> float | None:
+    finite = [float(v) for v in values if _is_finite_number(v)]
+    return float(np.sum(finite)) if finite else None
+
+
+def _first_timing(timing: dict[str, float], keys: list[str]) -> float | None:
+    for key in keys:
+        value = timing.get(key)
+        if _is_finite_number(value):
+            return float(value)
+    return None
+
+
+def _combine_fit_test(
+    fit_mean: float | None,
+    fit_std: float | None,
+    test_mean: float | None,
+    test_std: float | None,
+    fallback_mean: float | None,
+    fallback_std: float | None,
+) -> tuple[float | None, float | None]:
+    if _is_finite_number(fit_mean) and _is_finite_number(test_mean):
+        total_mean = float(fit_mean) + float(test_mean)
+        variances = [
+            float(value) ** 2
+            for value in (fit_std, test_std)
+            if _is_finite_number(value)
+        ]
+        total_std = float(np.sqrt(np.sum(variances))) if variances else None
+        return total_mean, total_std
+    mean = float(fallback_mean) if _is_finite_number(fallback_mean) else None
+    std = float(fallback_std) if _is_finite_number(fallback_std) else None
+    return mean, std
+
+
+def _is_finite_number(value: Any) -> bool:
+    return isinstance(value, (int, float, np.integer, np.floating)) and np.isfinite(float(value))
 
 
 def results_to_dataframe(results: list[SweepRunResult]) -> dict[str, list[Any]]:

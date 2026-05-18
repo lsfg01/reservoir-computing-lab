@@ -42,6 +42,13 @@ def load_config(path: str | Path) -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def _first_present(values: dict[str, Any], keys: list[str]) -> Any:
+    for key in keys:
+        if key in values:
+            return values[key]
+    return None
+
+
 def save_result(result: Any, output_dir: str | Path) -> Path:
     """
     Guarda un RunResult como JSON en output_dir/{experiment}_seed{seed}.json.
@@ -117,6 +124,7 @@ def save_sweep_summary(summary: Any, output_dir: str | Path) -> tuple[Path, Path
     csv_path = output_dir / "summary.csv"
     grid_keys: list[str] = []
     metric_keys: list[str] = []
+    timing_keys: list[str] = []
     for cfg in summary.configs:
         for key in cfg.config_point:
             if key not in grid_keys:
@@ -127,6 +135,10 @@ def save_sweep_summary(summary: Any, output_dir: str | Path) -> tuple[Path, Path
         for key in cfg.test_mean:
             if key not in metric_keys:
                 metric_keys.append(key)
+        for block in (getattr(cfg, "timing_mean", {}), getattr(cfg, "timing_std", {}), getattr(cfg, "timing_sum", {})):
+            for key in block:
+                if key not in timing_keys:
+                    timing_keys.append(key)
 
     fieldnames = ["config_id"] + grid_keys + ["best_ridge_mode"]
     for metric in metric_keys:
@@ -135,6 +147,22 @@ def save_sweep_summary(summary: Any, output_dir: str | Path) -> tuple[Path, Path
             f"val_{metric}_std",
             f"test_{metric}_mean",
             f"test_{metric}_std",
+        ])
+    fieldnames.extend([
+        "selected_fit_s_mean",
+        "selected_fit_s_std",
+        "selected_test_s_mean",
+        "selected_test_s_std",
+        "selected_total_s_mean",
+        "selected_total_s_std",
+        "tuning_total_s_sum",
+        "diagnostic_total_s_sum",
+    ])
+    for key in timing_keys:
+        fieldnames.extend([
+            f"timing_mean_{key}",
+            f"timing_std_{key}",
+            f"timing_sum_{key}",
         ])
     fieldnames.append("n_seeds")
 
@@ -160,6 +188,18 @@ def save_sweep_summary(summary: Any, output_dir: str | Path) -> tuple[Path, Path
                 row[f"val_{metric}_std"] = _csv_value(cfg.val_std.get(metric, ""))
                 row[f"test_{metric}_mean"] = _csv_value(cfg.test_mean.get(metric, ""))
                 row[f"test_{metric}_std"] = _csv_value(cfg.test_std.get(metric, ""))
+            row["selected_fit_s_mean"] = _csv_value(getattr(cfg, "timing_mean", {}).get("fit_s"))
+            row["selected_fit_s_std"] = _csv_value(getattr(cfg, "timing_std", {}).get("fit_s"))
+            row["selected_test_s_mean"] = _csv_value(_first_present(getattr(cfg, "timing_mean", {}), ["test_s", "final_test_s"]))
+            row["selected_test_s_std"] = _csv_value(_first_present(getattr(cfg, "timing_std", {}), ["test_s", "final_test_s"]))
+            row["selected_total_s_mean"] = _csv_value(_first_present(getattr(cfg, "timing_mean", {}), ["selected_total_s"]))
+            row["selected_total_s_std"] = _csv_value(_first_present(getattr(cfg, "timing_std", {}), ["selected_total_s"]))
+            row["tuning_total_s_sum"] = _csv_value(getattr(summary, "tuning_total_s_sum", None))
+            row["diagnostic_total_s_sum"] = _csv_value(getattr(summary, "diagnostic_total_s_sum", None))
+            for key in timing_keys:
+                row[f"timing_mean_{key}"] = _csv_value(getattr(cfg, "timing_mean", {}).get(key, ""))
+                row[f"timing_std_{key}"] = _csv_value(getattr(cfg, "timing_std", {}).get(key, ""))
+                row[f"timing_sum_{key}"] = _csv_value(getattr(cfg, "timing_sum", {}).get(key, ""))
             writer.writerow(row)
 
     return json_path, csv_path

@@ -87,6 +87,7 @@ class ExternalComparisonRunner:
                 "kind": model["kind"],
                 "n_candidates": n_candidates,
                 "candidate_validations": validations,
+                "grid": model["grid"],
             })
 
         payload = {
@@ -270,6 +271,9 @@ class ExternalComparisonRunner:
                 runs_by_key[(config_id, seed)] = run
                 self._save_run(run, runs_dir)
 
+        validation_runs = list(runs_by_key.values())
+        tuning_total_s_sum = _sum_run_timing(validation_runs, "tuning_s")
+        diagnostic_total_s_sum = _sum_run_timing(validation_runs, "total_s")
         best_config_id = self._select_best_config(list(runs_by_key.values()), task_name)
         selected_point = next(cp for cp in config_points if make_config_id(cp) == best_config_id)
 
@@ -285,6 +289,10 @@ class ExternalComparisonRunner:
                 final_evaluation_reason="best_by_task",
             )
             runs_by_key[(best_config_id, seed)] = run
+            diagnostic_total_s_sum = _add_optional(
+                diagnostic_total_s_sum,
+                _timing_from_run(run, "total_s"),
+            )
             self._save_run(run, runs_dir)
 
         summary = self._build_task_summary(
@@ -293,6 +301,8 @@ class ExternalComparisonRunner:
             runs=list(runs_by_key.values()),
             best_config_id=best_config_id,
             metric_names=metric_names,
+            tuning_total_s_sum=tuning_total_s_sum,
+            diagnostic_total_s_sum=diagnostic_total_s_sum,
         )
         self._save_task_summary(summary, task_dir)
         return summary
@@ -359,6 +369,7 @@ class ExternalComparisonRunner:
 
         for task_name, summary in list(task_summaries.items()):
             task_changed = False
+            diagnostic_total_s_sum = summary.get("diagnostic_total_s_sum")
             cfg = _summary_config_by_id(summary, config_id)
             metric_names = self._metrics_for_task(task_name)
             runs_dir = model_dir / task_name / "runs"
@@ -385,6 +396,10 @@ class ExternalComparisonRunner:
                 )
                 by_key[key] = run
                 self._save_run(run, runs_dir)
+                diagnostic_total_s_sum = _add_optional(
+                    diagnostic_total_s_sum,
+                    _timing_from_run(run, "total_s"),
+                )
                 changed = True
                 task_changed = True
 
@@ -399,6 +414,8 @@ class ExternalComparisonRunner:
                     runs=updated_runs,
                     best_config_id=summary["best_config_id"],
                     metric_names=metric_names,
+                    tuning_total_s_sum=summary.get("tuning_total_s_sum"),
+                    diagnostic_total_s_sum=diagnostic_total_s_sum,
                 )
                 task_summaries[task_name] = updated_summary
                 self._save_task_summary(updated_summary, model_dir / task_name)
@@ -458,6 +475,8 @@ class ExternalComparisonRunner:
                 seed=seed,
                 device=self._device,
                 evaluate_test=evaluate_test,
+                task_name=task_name,
+                task_cfg=task_cfg,
             )
         else:
             raise ValueError(f"Unsupported external model kind: {model['kind']!r}")
@@ -495,19 +514,27 @@ class ExternalComparisonRunner:
         with timer() as t_fit:
             model.fit(task_data.u_train, task_data.y_train, washout=task_data.washout)
         timing["train_s"] = t_fit["elapsed"]
+        timing["fit_s"] = timing["train_s"]
 
-        with timer() as t_eval:
+        with timer() as t_val:
             val_split = self._prepare_tapped_val(model, task_data)
             y_pred_val = model.predict_prepared(val_split.features)
             val_metrics = compute_metrics(val_split.targets, y_pred_val, metric_names)
+        timing["validation_s"] = t_val["elapsed"]
 
-            if evaluate_test:
+        if evaluate_test:
+            with timer() as t_test:
                 test_split = self._prepare_tapped_test(model, task_data)
                 y_pred_test = model.predict_prepared(test_split.features)
                 test_metrics = compute_metrics(test_split.targets, y_pred_test, metric_names)
-            else:
-                test_metrics = {}
-        timing["eval_s"] = t_eval["elapsed"]
+            timing["final_test_s"] = t_test["elapsed"]
+            timing["test_s"] = timing["final_test_s"]
+        else:
+            test_metrics = {}
+        timing["eval_s"] = timing["validation_s"] + timing.get("final_test_s", 0.0)
+        timing["tuning_s"] = timing["fit_s"] + timing["validation_s"]
+        if evaluate_test:
+            timing["selected_total_s"] = timing["fit_s"] + timing["final_test_s"]
         timing["total_s"] = timing["train_s"] + timing["eval_s"]
 
         return {
@@ -554,8 +581,9 @@ class ExternalComparisonRunner:
                 "test_mean": cfg.test_mean,
                 "test_std": cfg.test_std,
                 "best_ridge_mode": cfg.best_ridge_mode,
-                "timing_mean": {},
-                "timing_std": {},
+                "timing_mean": dict(getattr(cfg, "timing_mean", {})),
+                "timing_std": dict(getattr(cfg, "timing_std", {})),
+                "timing_sum": dict(getattr(cfg, "timing_sum", {})),
                 "metadata_mean": self._estimate_esn_metadata(model, task_name, cfg.config_point),
                 "metadata_std": {},
             })
@@ -571,6 +599,14 @@ class ExternalComparisonRunner:
             "selection_direction": self._ranking[task_name]["direction"],
             "configs": configs,
             "best_config_id": summary.best_config_id,
+            "selected_fit_s_mean": summary.selected_fit_s_mean,
+            "selected_fit_s_std": summary.selected_fit_s_std,
+            "selected_test_s_mean": summary.selected_test_s_mean,
+            "selected_test_s_std": summary.selected_test_s_std,
+            "selected_total_s_mean": summary.selected_total_s_mean,
+            "selected_total_s_std": summary.selected_total_s_std,
+            "tuning_total_s_sum": summary.tuning_total_s_sum,
+            "diagnostic_total_s_sum": summary.diagnostic_total_s_sum,
             "timestamp": summary.timestamp,
         }
 
@@ -600,6 +636,8 @@ class ExternalComparisonRunner:
         runs: list[dict[str, Any]],
         best_config_id: str,
         metric_names: list[str],
+        tuning_total_s_sum: float | None = None,
+        diagnostic_total_s_sum: float | None = None,
     ) -> dict[str, Any]:
         groups: dict[str, list[dict[str, Any]]] = {}
         for run in runs:
@@ -619,9 +657,20 @@ class ExternalComparisonRunner:
                 "test_std": {k: _std([r["test_metrics"][k] for r in group if k in r["test_metrics"]]) for k in test_keys},
                 "timing_mean": _aggregate_numeric_dict(group, "timing", np.mean),
                 "timing_std": _aggregate_numeric_dict(group, "timing", np.std),
+                "timing_sum": _aggregate_numeric_dict(group, "timing", np.sum),
                 "metadata_mean": _aggregate_numeric_dict(group, "metadata", np.mean),
                 "metadata_std": _aggregate_numeric_dict(group, "metadata", np.std),
             })
+
+        best_cfg = next((cfg for cfg in configs if cfg["config_id"] == best_config_id), None)
+        if tuning_total_s_sum is None:
+            tuning_total_s_sum = _sum_run_timing(
+                [run for run in runs if run.get("evaluation_phase") == "validation"],
+                "tuning_s",
+            )
+        if diagnostic_total_s_sum is None:
+            diagnostic_total_s_sum = _sum_run_timing(runs, "total_s")
+        selected_times = _selected_time_fields(best_cfg)
 
         return {
             "sweep_name": f"{self._sweep_name}_{model['name']}_{task_name}",
@@ -634,6 +683,9 @@ class ExternalComparisonRunner:
             "selection_direction": self._ranking[task_name]["direction"],
             "configs": configs,
             "best_config_id": best_config_id,
+            **selected_times,
+            "tuning_total_s_sum": tuning_total_s_sum,
+            "diagnostic_total_s_sum": diagnostic_total_s_sum,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -644,7 +696,10 @@ class ExternalComparisonRunner:
         for run in runs:
             if metric not in run["val_metrics"]:
                 raise ValueError(f"Metric {metric!r} not found in validation metrics for task {task_name!r}")
-            grouped.setdefault(run["config_id"], []).append(_scalar(run["val_metrics"][metric]))
+            value = _scalar(run["val_metrics"][metric])
+            if not np.isfinite(value):
+                value = float("inf") if direction == "min" else float("-inf")
+            grouped.setdefault(run["config_id"], []).append(value)
         scores = {cid: float(np.mean(values)) for cid, values in grouped.items()}
         if direction == "min":
             return min(scores, key=scores.__getitem__)
@@ -673,21 +728,62 @@ class ExternalComparisonRunner:
             row["config_point"] = config_point
 
             total_times: list[float] = []
+            selected_fit_means: list[float] = []
+            selected_fit_vars: list[float] = []
+            selected_test_means: list[float] = []
+            selected_test_vars: list[float] = []
+            selected_total_means: list[float] = []
+            selected_total_vars: list[float] = []
+            tuning_total_sums: list[float] = []
+            diagnostic_total_sums: list[float] = []
             total_params: list[float] = []
             trainable_params: list[float] = []
             for task_name, summary in task_summaries.items():
                 cfg = _summary_config_by_id(summary, config_id)
                 self._add_task_columns(row, task_name, cfg)
                 total_s = cfg.get("timing_mean", {}).get("total_s")
-                if total_s is not None:
+                if _is_finite_number(total_s):
                     total_times.append(float(total_s))
+                selected_times = _selected_time_fields(cfg)
+                fit_mean = selected_times["selected_fit_s_mean"]
+                fit_std = selected_times["selected_fit_s_std"]
+                test_mean = selected_times["selected_test_s_mean"]
+                test_std = selected_times["selected_test_s_std"]
+                selected_total = selected_times["selected_total_s_mean"]
+                selected_total_std = selected_times["selected_total_s_std"]
+                if _is_finite_number(fit_mean):
+                    selected_fit_means.append(float(fit_mean))
+                if _is_finite_number(fit_std):
+                    selected_fit_vars.append(float(fit_std) ** 2)
+                if _is_finite_number(test_mean):
+                    selected_test_means.append(float(test_mean))
+                if _is_finite_number(test_std):
+                    selected_test_vars.append(float(test_std) ** 2)
+                if _is_finite_number(selected_total):
+                    selected_total_means.append(float(selected_total))
+                if _is_finite_number(selected_total_std):
+                    selected_total_vars.append(float(selected_total_std) ** 2)
+                tuning_total_s = summary.get("tuning_total_s_sum")
+                if _is_finite_number(tuning_total_s):
+                    tuning_total_sums.append(float(tuning_total_s))
+                diagnostic_total_s = summary.get("diagnostic_total_s_sum")
+                if _is_finite_number(diagnostic_total_s):
+                    diagnostic_total_sums.append(float(diagnostic_total_s))
                 n_total = cfg.get("metadata_mean", {}).get("n_total_params")
                 n_trainable = cfg.get("metadata_mean", {}).get("n_trainable_params")
                 if n_total is not None:
                     total_params.append(float(n_total))
                 if n_trainable is not None:
                     trainable_params.append(float(n_trainable))
-            row["total_s_mean"] = float(np.mean(total_times)) if total_times else None
+            row["diagnostic_total_s_mean"] = float(np.mean(total_times)) if total_times else None
+            row["selected_fit_s_mean"] = float(np.sum(selected_fit_means)) if selected_fit_means else None
+            row["selected_fit_s_std"] = float(np.sqrt(np.sum(selected_fit_vars))) if selected_fit_vars else None
+            row["selected_test_s_mean"] = float(np.sum(selected_test_means)) if selected_test_means else None
+            row["selected_test_s_std"] = float(np.sqrt(np.sum(selected_test_vars))) if selected_test_vars else None
+            row["selected_total_s_mean"] = float(np.sum(selected_total_means)) if selected_total_means else None
+            row["selected_total_s_std"] = float(np.sqrt(np.sum(selected_total_vars))) if selected_total_vars else None
+            row["tuning_total_s_sum"] = float(np.sum(tuning_total_sums)) if tuning_total_sums else None
+            row["diagnostic_total_s_sum"] = float(np.sum(diagnostic_total_sums)) if diagnostic_total_sums else None
             row["n_total_params_mean"] = float(np.mean(total_params)) if total_params else None
             row["n_trainable_params_mean"] = float(np.mean(trainable_params)) if trainable_params else None
             rows.append(row)
@@ -742,11 +838,13 @@ class ExternalComparisonRunner:
         enabled = self._enabled_tasks()
         rank_columns = []
         for task_name in enabled:
-            values = np.array([r.get(f"_rank_value_{task_name}", np.nan) for r in rows], dtype=float)
             direction = self._ranking[task_name]["direction"]
+            raw_values = np.array([r.get(f"_rank_value_{task_name}", np.nan) for r in rows], dtype=float)
             if direction == "min":
+                values = np.where(np.isfinite(raw_values), raw_values, np.inf)
                 ranks = rankdata(values, method="min").astype(int)
             else:
+                values = np.where(np.isfinite(raw_values), raw_values, -np.inf)
                 ranks = rankdata(-values, method="min").astype(int)
             rank_col = self._rank_column(task_name, within_key)
             rank_columns.append(rank_col)
@@ -826,8 +924,12 @@ class ExternalComparisonRunner:
             row.update(cfg["config_point"])
             _flatten_metric_block(row, "val", cfg.get("val_mean", {}), cfg.get("val_std", {}))
             _flatten_metric_block(row, "test", cfg.get("test_mean", {}), cfg.get("test_std", {}))
+            row.update(_selected_time_fields(cfg))
+            row["tuning_total_s_sum"] = summary.get("tuning_total_s_sum")
+            row["diagnostic_total_s_sum"] = summary.get("diagnostic_total_s_sum")
             _flatten_prefixed(row, "timing_mean", cfg.get("timing_mean", {}))
             _flatten_prefixed(row, "timing_std", cfg.get("timing_std", {}))
+            _flatten_prefixed(row, "timing_sum", cfg.get("timing_sum", {}))
             _flatten_prefixed(row, "metadata_mean", cfg.get("metadata_mean", {}))
             rows.append(row)
         return rows
@@ -905,13 +1007,19 @@ def _has_complete_test_metrics(run: dict[str, Any], metric_names: list[str]) -> 
 
 
 def _mean(values: list[Any]) -> Any:
-    arr = np.asarray(values, dtype=float)
+    valid = [value for value in values if value is not None]
+    if not valid:
+        return None
+    arr = np.asarray(valid, dtype=float)
     mean = np.mean(arr, axis=0)
     return float(mean) if np.ndim(mean) == 0 else mean.tolist()
 
 
 def _std(values: list[Any]) -> Any:
-    arr = np.asarray(values, dtype=float)
+    valid = [value for value in values if value is not None]
+    if not valid:
+        return None
+    arr = np.asarray(valid, dtype=float)
     std = np.std(arr, axis=0, ddof=0)
     return float(std) if np.ndim(std) == 0 else std.tolist()
 
@@ -938,9 +1046,103 @@ def _aggregate_numeric_dict(
     })
     out: dict[str, float] = {}
     for key in keys:
-        values = [float(run[block][key]) for run in group if key in run.get(block, {})]
-        out[key] = float(reducer(values))
+        values = [
+            float(run[block][key])
+            for run in group
+            if _is_finite_number(run.get(block, {}).get(key))
+        ]
+        if values:
+            out[key] = float(reducer(values))
     return out
+
+
+def _selected_time_fields(cfg: dict[str, Any] | None) -> dict[str, float | None]:
+    if cfg is None:
+        return {
+            "selected_fit_s_mean": None,
+            "selected_fit_s_std": None,
+            "selected_test_s_mean": None,
+            "selected_test_s_std": None,
+            "selected_total_s_mean": None,
+            "selected_total_s_std": None,
+        }
+    timing_mean = cfg.get("timing_mean", {})
+    timing_std = cfg.get("timing_std", {})
+    fit_mean = _first_timing(timing_mean, ["fit_s"])
+    fit_std = _first_timing(timing_std, ["fit_s"])
+    test_mean = _first_timing(timing_mean, ["test_s", "final_test_s"])
+    test_std = _first_timing(timing_std, ["test_s", "final_test_s"])
+    total_mean, total_std = _combine_fit_test(
+        fit_mean,
+        fit_std,
+        test_mean,
+        test_std,
+        _first_timing(timing_mean, ["selected_total_s"]),
+        _first_timing(timing_std, ["selected_total_s"]),
+    )
+    if total_mean is None:
+        total_mean = _first_timing(timing_mean, ["total_s"])
+        total_std = _first_timing(timing_std, ["total_s"])
+    return {
+        "selected_fit_s_mean": fit_mean,
+        "selected_fit_s_std": fit_std,
+        "selected_test_s_mean": test_mean,
+        "selected_test_s_std": test_std,
+        "selected_total_s_mean": total_mean,
+        "selected_total_s_std": total_std,
+    }
+
+
+def _first_timing(timing: dict[str, Any], keys: list[str]) -> float | None:
+    for key in keys:
+        value = timing.get(key)
+        if _is_finite_number(value):
+            return float(value)
+    return None
+
+
+def _combine_fit_test(
+    fit_mean: float | None,
+    fit_std: float | None,
+    test_mean: float | None,
+    test_std: float | None,
+    fallback_mean: float | None,
+    fallback_std: float | None,
+) -> tuple[float | None, float | None]:
+    if _is_finite_number(fit_mean) and _is_finite_number(test_mean):
+        total_mean = float(fit_mean) + float(test_mean)
+        variances = [
+            float(value) ** 2
+            for value in (fit_std, test_std)
+            if _is_finite_number(value)
+        ]
+        total_std = float(np.sqrt(np.sum(variances))) if variances else None
+        return total_mean, total_std
+    mean = float(fallback_mean) if _is_finite_number(fallback_mean) else None
+    std = float(fallback_std) if _is_finite_number(fallback_std) else None
+    return mean, std
+
+
+def _sum_run_timing(runs: list[dict[str, Any]], key: str) -> float | None:
+    values = [_timing_from_run(run, key) for run in runs]
+    finite = [float(value) for value in values if _is_finite_number(value)]
+    return float(np.sum(finite)) if finite else None
+
+
+def _timing_from_run(run: dict[str, Any], key: str) -> float | None:
+    value = run.get("timing", {}).get(key)
+    if value is None and key == "tuning_s" and run.get("evaluation_phase") == "validation":
+        value = run.get("timing", {}).get("total_s")
+    return float(value) if _is_finite_number(value) else None
+
+
+def _add_optional(left: float | None, right: float | None) -> float | None:
+    values = [float(value) for value in (left, right) if _is_finite_number(value)]
+    return float(np.sum(values)) if values else None
+
+
+def _is_finite_number(value: Any) -> bool:
+    return isinstance(value, (int, float, np.integer, np.floating)) and np.isfinite(float(value))
 
 
 def _flatten_metric_block(

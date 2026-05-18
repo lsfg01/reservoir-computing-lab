@@ -67,6 +67,9 @@ class ConfigSummary:
     test_mean: dict[str, float]
     test_std: dict[str, float]
     best_ridge_mode: float
+    timing_mean: dict[str, float] = dataclasses.field(default_factory=dict)
+    timing_std: dict[str, float] = dataclasses.field(default_factory=dict)
+    timing_sum: dict[str, float] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
@@ -78,6 +81,14 @@ class SweepSummary:
     configs: list[ConfigSummary]
     best_config_id: str   # config con menor val_mean[primary_metric]
     timestamp: str
+    selected_fit_s_mean: float | None = None
+    selected_fit_s_std: float | None = None
+    selected_test_s_mean: float | None = None
+    selected_test_s_std: float | None = None
+    selected_total_s_mean: float | None = None
+    selected_total_s_std: float | None = None
+    tuning_total_s_sum: float | None = None
+    diagnostic_total_s_sum: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +99,10 @@ def make_config_id(config_point: dict[str, Any]) -> str:
     """Hash determinista del config_point (ordenado por clave)."""
     canonical = json.dumps(config_point, sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
+
+
+def _sum_timing(timing: dict[str, float], keys: list[str]) -> float:
+    return float(sum(float(timing.get(key, 0.0)) for key in keys))
 
 
 def _resolve_task(name: str, state_policy: str = "reset", task_cfg: dict | None = None) -> BaseTask:
@@ -248,13 +263,15 @@ class SweepRunner:
             res_params.pop("leak_rate", None)
             res_params.pop("ridge_param", None)
 
-            reservoir_builder = resolve_reservoir(res_params)
-            n_inputs = task_data.u_train.shape[1]
-            matrices = reservoir_builder.build(N=self._N, n_inputs=n_inputs, seed=seed)
-            diag = _reservoir_diagnostics(matrices.W, transient_kmax=self._transient_kmax)
+            with timer() as t_setup:
+                reservoir_builder = resolve_reservoir(res_params)
+                n_inputs = task_data.u_train.shape[1]
+                matrices = reservoir_builder.build(N=self._N, n_inputs=n_inputs, seed=seed)
+                diag = _reservoir_diagnostics(matrices.W, transient_kmax=self._transient_kmax)
 
-            leak_rate = config_point.get("leak_rate", 1.0)
-            esn = ESNModel(matrices.W, matrices.Win, matrices.bias, leak_rate=leak_rate)
+                leak_rate = config_point.get("leak_rate", 1.0)
+                esn = ESNModel(matrices.W, matrices.Win, matrices.bias, leak_rate=leak_rate)
+            timing["reservoir_setup_s"] = t_setup["elapsed"]
 
             # Estados train (washout incluido en u_train)
             with timer() as t_train:
@@ -272,20 +289,28 @@ class SweepRunner:
 
             if task_data.u_val_full is not None:
                 # reset: cada split tiene su propio warmup de longitud washout
-                X_val, _ = esn.run_states(
-                    task_data.u_val_full, washout=washout, x0=None
-                )
-                X_test, _ = esn.run_states(
-                    task_data.u_test_full, washout=washout, x0=None
-                )
+                with timer() as t_val_states:
+                    X_val, _ = esn.run_states(
+                        task_data.u_val_full, washout=washout, x0=None
+                    )
+                timing["val_states_s"] = t_val_states["elapsed"]
+                with timer() as t_test_states:
+                    X_test, _ = esn.run_states(
+                        task_data.u_test_full, washout=washout, x0=None
+                    )
+                timing["test_states_s"] = t_test_states["elapsed"]
             else:
                 # carryover: estado continuo desde train
-                X_val, x_end_val = esn.run_states(
-                    task_data.u_val, washout=0, x0=x_end_train
-                )
-                X_test, _ = esn.run_states(
-                    task_data.u_test, washout=0, x0=x_end_val
-                )
+                with timer() as t_val_states:
+                    X_val, x_end_val = esn.run_states(
+                        task_data.u_val, washout=0, x0=x_end_train
+                    )
+                timing["val_states_s"] = t_val_states["elapsed"]
+                with timer() as t_test_states:
+                    X_test, _ = esn.run_states(
+                        task_data.u_test, washout=0, x0=x_end_val
+                    )
+                timing["test_states_s"] = t_test_states["elapsed"]
 
             # u_val / y_val / u_test / y_test ya son puntuados en TaskData
             u_val_post = task_data.u_val
@@ -294,9 +319,13 @@ class SweepRunner:
             Y_test = task_data.y_test
 
             # Design matrices
-            F_train = build_readout_features(X_train, u_train_post, self._readout_mode)
-            F_val = build_readout_features(X_val, u_val_post, self._readout_mode)
-            F_test = build_readout_features(X_test, u_test_post, self._readout_mode)
+            with timer() as t_train_val_features:
+                F_train = build_readout_features(X_train, u_train_post, self._readout_mode)
+                F_val = build_readout_features(X_val, u_val_post, self._readout_mode)
+            timing["train_val_features_s"] = t_train_val_features["elapsed"]
+            with timer() as t_test_features:
+                F_test = build_readout_features(X_test, u_test_post, self._readout_mode)
+            timing["test_features_s"] = t_test_features["elapsed"]
 
             # Selección de ridge_param por validación
             with timer() as t_ridge:
@@ -313,23 +342,48 @@ class SweepRunner:
 
             # Readout final con best_ridge
             readout = RidgeReadout(ridge_param=ridge_result.best_ridge)
-            readout.fit(F_train, Y_train)
-            y_pred_val = readout.predict(F_val)
-            y_pred_test = readout.predict(F_test)
+            with timer() as t_fit:
+                readout.fit(F_train, Y_train)
+            timing["readout_fit_s"] = t_fit["elapsed"]
 
             # Métricas
-            val_metrics = {
-                m: _METRIC_FNS[m](Y_val, y_pred_val)
-                for m in self._metric_names
-                if m in _METRIC_FNS
-            }
-            test_metrics = {
-                m: _METRIC_FNS[m](Y_test, y_pred_test)
-                for m in self._metric_names
-                if m in _METRIC_FNS
-            }
+            with timer() as t_val_eval:
+                y_pred_val = readout.predict(F_val)
+                val_metrics = {
+                    m: _METRIC_FNS[m](Y_val, y_pred_val)
+                    for m in self._metric_names
+                    if m in _METRIC_FNS
+                }
+            timing["val_eval_s"] = t_val_eval["elapsed"]
+            with timer() as t_test_eval:
+                y_pred_test = readout.predict(F_test)
+                test_metrics = {
+                    m: _METRIC_FNS[m](Y_test, y_pred_test)
+                    for m in self._metric_names
+                    if m in _METRIC_FNS
+                }
+            timing["test_eval_s"] = t_test_eval["elapsed"]
 
         timing["total_s"] = t_total["elapsed"]
+        timing["fit_s"] = _sum_timing(
+            timing,
+            [
+                "reservoir_setup_s",
+                "train_states_s",
+                "val_states_s",
+                "train_val_features_s",
+                "ridge_select_s",
+                "readout_fit_s",
+                "val_eval_s",
+            ],
+        )
+        timing["tuning_s"] = timing["fit_s"]
+        timing["test_s"] = _sum_timing(
+            timing,
+            ["test_states_s", "test_features_s", "test_eval_s"],
+        )
+        timing["final_test_s"] = timing["test_s"]
+        timing["selected_total_s"] = timing["fit_s"] + timing["test_s"]
 
         # val_curve con keys str para serialización JSON
         val_curve_str = {str(k): v for k, v in ridge_result.val_curve.items()}
