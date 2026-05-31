@@ -21,7 +21,7 @@ from rc_lab.utils.timing import timer
 
 
 SUPPORTED_TASKS = {"delay_recall", "narma10", "mackey_glass"}
-SUPPORTED_MODEL_KINDS = {"esn", "torch_simple_rnn", "torch_lstm", "tapped_delay_ridge", "narx_ridge"}
+SUPPORTED_MODEL_KINDS = {"esn", "torch_simple_rnn", "torch_lstm", "tapped_delay_ridge", "narx_ridge", "ng_rc"}
 PREDICTIVE_TASKS = {"narma10", "mackey_glass"}
 MEMORY_METRICS = {
     "corr2_by_delay",
@@ -463,7 +463,7 @@ class ExternalComparisonRunner:
             seed=seed,
         )
 
-        if model["kind"] in {"tapped_delay_ridge", "narx_ridge"}:
+        if model["kind"] in {"tapped_delay_ridge", "narx_ridge", "ng_rc"}:
             result = self._fit_tapped_delay(task_data, config_point, metric_names, evaluate_test)
         elif model["kind"] in {"torch_simple_rnn", "torch_lstm"}:
             from rc_lab.sequence_models.torch_models import fit_torch_sequence_model

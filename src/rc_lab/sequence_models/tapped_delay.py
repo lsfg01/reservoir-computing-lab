@@ -22,6 +22,42 @@ class TappedDelayRidge:
 
     Features at time t are [u(t), u(t-1), ..., u(t-L)]. The effective washout
     for standalone full sequences is max(washout, n_lags).
+
+    Correspondencia NVAR / NG-RC
+    ----------------------------
+    Con ``feature_mode="quadratic"`` y entrada escalar, la librería de
+    características por muestra es:
+
+        θ(t) = [u(t), u(t-1), …, u(t-L),  u(t)², u(t-1)², …, u(t-L)²]
+
+    que tiene 2*(L+1) columnas. Esto constituye un **NVAR de orden 2 diagonal**:
+    incluye los monomios lineales y los cuadrados individuales de cada retardo,
+    pero *no* los productos cruzados u(t-i)·u(t-j) con i≠j.
+
+    La predicción final es:
+        ŷ(t) = Σᵢ aᵢ·u(t-i) + Σᵢ bᵢ·u(t-i)²
+
+    con coeficientes entrenados por ridge (sin término constante explícito,
+    ya que RidgeReadout usa fit_intercept=False).
+
+    Esta es la forma funcional del NG-RC primitivo (Gauthier et al. 2021 §II).
+    Use ``kind="ng_rc"`` en los configs del runner externo como alias semántico
+    para esta configuración.
+
+    Brecha hacia el NG-RC completo de Gauthier
+    -------------------------------------------
+    Para reproducir fielmente el NG-RC de Gauthier et al. (2021) faltaría:
+    - Productos cruzados u(t-i)·u(t-j), i≠j (librería de monomios completa).
+    - Orden polinomial configurable (k > 2).
+    - Selección/poda de monomios.
+    - Término constante explícito separado.
+    Estas extensiones están fuera del alcance de esta versión primitiva.
+
+    Feature modes
+    -------------
+    raw / linear  : θ(t) = [u(t), …, u(t-L)]                  → (L+1) columnas
+    quadratic     : θ(t) = [u(t), …, u(t-L), u(t)², …, u(t-L)²] → 2*(L+1) columnas
+    linear_quadratic : idéntico a quadratic (alias semántico)
     """
 
     def __init__(
