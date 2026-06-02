@@ -1,0 +1,29 @@
+experiment:
+  name: baseline_narma10
+  seeds: [42, 123, 456]
+  output_dir: results/prelim_study/experiments/baseline_narma10
+  state_policy: reset        # "reset" | "carryover"
+  readout_features: states   # "states" | "extended" ([1; u(t); x(t)])
+
+task:
+  name: narma10
+  n_train: 2000
+  n_test: 1000
+  washout: 200
+
+reservoir:
+  type: random_sparse
+  N: 100
+  spectral_radius: 0.9
+  input_scaling: 0.1
+  sparsity: 0.9
+  leak_rate: 1.0
+  bias_scaling: 0.0
+
+readout:
+  type: ridge
+  ridge_param: 1.0e-6
+
+metrics:
+  - nmse
+  - rmse

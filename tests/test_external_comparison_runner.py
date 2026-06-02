@@ -446,7 +446,7 @@ def test_esn_common_timings_use_validation_tuning_not_raw_total():
 def test_main_external_config_tapped_delay_is_limited_and_counts_match():
     import yaml
 
-    cfg = yaml.safe_load(Path("configs/external/esn_vs_rnn_lstm.yaml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load(Path("configs/prelim_study/external/esn_vs_rnn_lstm.yaml").read_text(encoding="utf-8"))
     ExternalComparisonRunner(cfg)
 
     target = cfg["comparison"]["n_candidates_per_model"]
