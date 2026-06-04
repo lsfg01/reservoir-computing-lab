@@ -10,6 +10,7 @@ Guardado incremental: un JSON por punto, summary JSON al finalizar.
 
 from __future__ import annotations
 
+import csv
 import itertools
 import json
 from datetime import datetime, timezone
@@ -43,6 +44,13 @@ def _final_slope_negative(d_curve: np.ndarray, frac: float = 0.05) -> bool:
     last = float(np.mean(d_curve[-window:]))
     prev = float(np.mean(d_curve[-2 * window: -window])) if T >= 2 * window else float(np.mean(d_curve[:window]))
     return last < prev
+
+
+def _csv_value(value: Any) -> Any:
+    safe = make_json_safe(value)
+    if isinstance(safe, (list, dict)):
+        return json.dumps(safe, ensure_ascii=False, allow_nan=False)
+    return "" if safe is None else safe
 
 
 def _subsample_curve(curve: np.ndarray, step: int = 10) -> list[float]:
@@ -103,6 +111,9 @@ class ESPFrontierRunner:
         self._alpha_list: list[float] = list(grid["leak_rate"])
 
         self._families: list[dict[str, Any]] = list(config["families"])
+
+        diagnostics = config.get("diagnostics", {})
+        self._sat_window_frac: float = float(diagnostics.get("saturation_window_frac", 0.5))
 
     # ------------------------------------------------------------------
     # Validación
@@ -201,6 +212,15 @@ class ESPFrontierRunner:
 
         esn = ESNModel(matrices.W, matrices.Win, matrices.bias, leak_rate=alpha)
 
+        # Saturation diagnosis: same u as evaluate_esp_sampled (first draw from seed)
+        rng_sat = np.random.default_rng(seed)
+        u_sat = rng_sat.uniform(-1.0, 1.0, (self._T, 1))
+        states_sat, _ = esn.run_states(u_sat, washout=0, x0=np.zeros(N))
+        window_size = max(1, int(self._T * self._sat_window_frac))
+        states_window = states_sat[-window_size:]
+        saturation_mean = float(np.mean(np.abs(states_window)))
+        saturation_frac = float(np.mean(np.abs(states_window) > 0.99))
+
         with timer() as t_esp:
             esp = evaluate_esp_sampled(esn, seed=seed, T=self._T, n_pairs=self._n_pairs, eps=self._eps)
         esp_elapsed = t_esp["elapsed"]
@@ -215,8 +235,9 @@ class ESPFrontierRunner:
             if not pr.synchronized
         ]
         n_unsync = len(unsync_final_slope_neg)
+        n_unsync_descending = sum(unsync_final_slope_neg)
         frac_unsync_decreasing = (
-            float(sum(unsync_final_slope_neg) / n_unsync) if n_unsync > 0 else None
+            float(n_unsync_descending / n_unsync) if n_unsync > 0 else None
         )
 
         # d_curve_mean submuestreada
@@ -234,6 +255,10 @@ class ESPFrontierRunner:
             "sync_time_mean": esp.sync_time_mean,
             "sync_time_std": esp.sync_time_std,
             "frac_unsync_decreasing": frac_unsync_decreasing,
+            "n_unsync": n_unsync,
+            "n_unsync_descending": n_unsync_descending,
+            "saturation_mean": saturation_mean,
+            "saturation_frac": saturation_frac,
             "sigma_max": sigma_max,
             "rho_real": rho_real,
             "d_curve_mean_sub": d_curve_sub,
@@ -282,6 +307,17 @@ class ESPFrontierRunner:
 
             sync_time_vals = [r["sync_time_mean"] for r in recs if r["sync_time_mean"] is not None]
 
+            # Saturation: average over seeds
+            saturation_mean_mean = float(np.mean([r["saturation_mean"] for r in recs]))
+            saturation_frac_mean = float(np.mean([r["saturation_frac"] for r in recs]))
+
+            # Truncation flag: pool non-sync pairs across all seeds
+            total_unsync = sum(r["n_unsync"] for r in recs)
+            total_descending = sum(r["n_unsync_descending"] for r in recs)
+            nonsync_fraction_descending = (
+                float(total_descending / total_unsync) if total_unsync > 0 else None
+            )
+
             row: dict[str, Any] = {
                 "family_name": family_name,
                 "s_in": s_in,
@@ -294,6 +330,9 @@ class ESPFrontierRunner:
                 "sync_time_mean_std": float(np.std(sync_time_vals)) if len(sync_time_vals) > 1 else None,
                 "sigma_max_mean": float(np.mean(sigma_max_vals)),
                 "rho_real_mean": float(np.mean(rho_real_vals)),
+                "saturation_mean_mean": saturation_mean_mean,
+                "saturation_frac_mean": saturation_frac_mean,
+                "nonsync_fraction_descending": nonsync_fraction_descending,
             }
             rows.append(row)
 
@@ -309,11 +348,23 @@ class ESPFrontierRunner:
 
     def _save_summary(self, summary: dict[str, Any]) -> Path:
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        path = self._output_dir / "summary.json"
+
+        json_path = self._output_dir / "summary.json"
         safe = make_json_safe(summary)
-        with open(path, "w", encoding="utf-8") as f:
+        with open(json_path, "w", encoding="utf-8") as f:
             json.dump(safe, f, indent=2, allow_nan=False)
-        return path
+
+        rows = summary.get("rows", [])
+        if rows:
+            csv_path = self._output_dir / "summary.csv"
+            fieldnames: list[str] = list(rows[0].keys())
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow({k: _csv_value(v) for k, v in row.items()})
+
+        return json_path
 
     # ------------------------------------------------------------------
     # Punto de entrada principal

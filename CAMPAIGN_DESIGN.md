@@ -165,6 +165,65 @@ Rebalanceado a lr×hidden.
 
 ---
 
+## Estado de campaña — Fase 2 (actualizado)
+
+### Hecho
+- **Reorganización de repo** ejecutada: configs/ y results/ bajo `prelim_study/`
+  (sweeps, designs, external, experiments, components/{reservoirs,tasks,evaluators})
+  y `final_campaign/` (frontier). Runners leen `output_dir` del config; reorg fue
+  solo mover + reescribir `output_dir`. Fix aplicado: test_external_comparison_runner
+  apuntaba a la ruta antigua del config externo.
+- **Paso 0 — Frontera de estabilidad (ESP)**: módulo aislado `esp_frontier_runner`
+  (envoltura de `evaluate_esp_sampled` + diagnósticos W) verificado y fiel.
+  - Decisiones cerradas: kmax MC = N = 100 (opción 120 con corte en 100); arrancar
+    Fase 0 aislada antes de fijar el grid del sweep; eps=1e-3.
+  - Corrida v1 (T=4000, α=1): frontera nítida en ρ=1 a drive bajo. **Marco corregido:
+    NO anclar parámetros al lab (todo lo previo = MVP) y NO imponer ρ≤1.**
+  - Corrida dilución (T=8000, 3780 pts: ρ×s_in×α×seeds): summary.json/csv en
+    `results/final_campaign/frontier/esp_frontier_dilution/`. Añadidos al runner:
+    diagnóstico de amplitud (`saturation_mean` = ⟨|x|⟩, ¡es amplitud, no saturación!)
+    + `saturation_frac` (|x|>0.99) + `nonsync_fraction_descending` (truncamiento).
+- **Hallazgos clave** (material cap. análisis):
+  - Frontera empírica se desplaza > ρ=1 con s_in (hasta ~1.5 a s_in≥0.8); robusto a α.
+    σmax<1 (≈ρ 0.52) muy conservadora. Dilución genuina, sin saturación dura
+    (sat_frac máx ≈0.013; amplitud media máx ≈0.56).
+  - **Memoria ≠ ρ alto**: washout explota en ρ→1 SOLO a drive bajo; a drive alto el
+    olvido es rápido aunque ρ=1.3–1.5. Memoria y no-linealidad viven en esquinas opuestas.
+  - Leak: alarga washout y atenúa amplitud (desacopla escala temporal/amplitud del
+    drive). Su frontera-localización NO es resoluble a T=8000 (truncamiento a α bajo).
+  - washout=1000 (transitorio descartado del lab) validado para α∈[0.5,1] (sync ≤~436
+    en ρ=1); solo se rompe con α≤0.3.
+- **Visualización**: módulo reutilizable `src/rc_lab/viz/` (style, primitives, io,
+  frontier, tables) + `scripts/plot_frontier.py` (bootstrap csv↔json). Deps añadidas:
+  matplotlib + pandas. `io` lee CSV (interfaz tabular común a todos los runners).
+  Figuras F1–F7 en `results/final_campaign/frontier/figs/`.
+- **Memoria**: borrador LaTeX de la sección de frontera (`frontera_estabilidad.tex`,
+  fuera del repo). Estructura propuesta de capítulos finales:
+  **Análisis dinámico (frontera + regiones) → Resultados experimentales (configs→errores)
+  → Discusión → Conclusiones** (sustituye a resultados→discusión→conclusiones).
+
+### Regiones candidatas para el sweep (fijadas, R³; α≈1 salvo R4)
+- **R1 contractiva ref.**: ρ∈[0.6,0.9], s_in∈[0.05,0.2] — olvido rápido, casi lineal.
+- **R2 cresta memoria**: ρ∈[0.9,1.0], s_in∈[0.05,0.2] — washout largo, baja no-lin.
+- **R3 no-lineal extendida**: ρ∈[1.0,1.4], s_in∈[0.4,1.5] — ESP válida >1, alta
+  amplitud, olvido rápido; apuesta = tareas de mezcla no lineal, no memoria.
+- **R4 no-lineal con fuga**: α∈[0.3,0.5] + s_in alto — no-linealidad de R3 con más
+  memoria y menos amplitud.
+
+### Pendiente / próxima sesión
+- **Cerrar regiones del sweep con las figuras delante** (R1–R4 ya casi fijas;
+  decidir interiores exactos + puntos de control cruzando la frontera).
+- **Redactar el config del sweep** (Paso 1) que barra esas subregiones (uniones en
+  R³, no una caja). Recordar kmax MC = 100; tareas multitask.
+- Cosméticos abiertos de figuras (PATCH 2, no bloqueante): frontera-escalera en
+  F1–F3, mallado categórico (anchos iguales, ticks centrados), F7 (frontera = curvas
+  por α + R1–R3 planas en α=1), F5 (polilínea continua sólido↔censurado). Ajustar
+  caption F7 en el .tex tras rehacerla.
+- Secundario (opcional, redondear cap. dilución): frontera del leak a T escalado
+  ~1/α si se quiere resolver su localización.
+
+---
+
 ## Fase 3 — Análisis estadístico (POST-campaña, pendiente)
 
 Stack mínimo (marco de Demšar 2006, no paramétrico sobre rankings):
@@ -191,9 +250,3 @@ Stack mínimo (marco de Demšar 2006, no paramétrico sobre rankings):
 4. Capa de design (Paso 3) → familias + baseline + diagnósticos, N=100.
 5. Comparación externa (Paso 4) → vs RNN/LSTM/NG-RC, ~2.5h CPU.
 6. Análisis estadístico (Fase 3) → Friedman/Nemenyi/CD.
-
-## Pendiente antes de generar YAML
-- Decidir kmax de MC en design (alinear con N).
-- Confirmar densidad exacta del grid de ρ en sweep (cerca de 1).
-- Generar configs: sweep región, (escalado), design final, externa final.
-- Sanity check de coste ya hecho; tiempos arriba.
