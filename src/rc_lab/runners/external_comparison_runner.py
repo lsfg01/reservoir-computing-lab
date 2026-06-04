@@ -972,6 +972,11 @@ class ExternalComparisonRunner:
             "table": public_rows,
         }
         _write_json(self._output_dir / "comparison_summary.json", payload)
+        try:
+            from rc_lab.analysis.task_rankings import save_task_rankings
+            save_task_rankings(payload, self._output_dir, top_n=20)
+        except Exception as exc:  # pragma: no cover - post-hoc analysis must not fail runs
+            print(f"task_rankings post-processing skipped: {exc}")
 
 
 def _dedupe(values: list[str]) -> list[str]:

@@ -292,8 +292,9 @@ def save_multitask_summary(summary: Any, output_dir: str | Path) -> tuple[Path, 
         n10_metric = "nmse" if n10_enabled else None
         mg_metric  = "nmse" if mg_enabled  else None
 
-    # Columnas del grid (orden estable)
-    grid_keys = list(summary.grid.keys()) if summary.grid else []
+    # Columnas del grid (orden estable); soporta dict clásico y list[dict] (grids:)
+    gs = summary.grid
+    grid_keys = list(gs.keys()) if isinstance(gs, dict) else (list(gs[0].keys()) if gs else [])
 
     # Construir fieldnames condicionalmente según tareas habilitadas
     fieldnames = ["config_id"] + grid_keys

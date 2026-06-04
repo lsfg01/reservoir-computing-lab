@@ -55,7 +55,7 @@ class RidgeReadout:
         """Entrena el readout sobre la design matrix F."""
         if F.shape[0] != Y.shape[0]:
             raise ValueError("F y Y deben tener el mismo número de filas")
-        self._model = Ridge(alpha=self._ridge_param, fit_intercept=False)
+        self._model = Ridge(alpha=self._ridge_param, fit_intercept=False, solver="svd")
         self._model.fit(F, Y)
 
     def predict(self, F: np.ndarray) -> np.ndarray:

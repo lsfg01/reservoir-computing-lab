@@ -101,6 +101,43 @@ def make_config_id(config_point: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
 
 
+def _resolve_grid_spec(cfg: dict[str, Any]) -> "dict | list[dict]":
+    """Devuelve el grid spec del config (dict clásico o lista de bloques).
+    Lanza ValueError si hay ambos o ninguno de 'grid'/'grids'."""
+    has_grid, has_grids = "grid" in cfg, "grids" in cfg
+    if has_grid == has_grids:
+        raise ValueError("Config: debe haber exactamente uno de 'grid' o 'grids'.")
+    return cfg["grids"] if has_grids else cfg["grid"]
+
+
+def expand_grid(grid_spec: "dict | list[dict]") -> list[dict[str, Any]]:
+    """dict → producto cartesiano clásico. list[dict] → unión de cajas,
+    concatenada y deduplicada por config_id conservando primera aparición."""
+    blocks = [grid_spec] if isinstance(grid_spec, dict) else list(grid_spec)
+    if not blocks:
+        raise ValueError("expand_grid: grid vacío.")
+    key_sets = {frozenset(b) for b in blocks}
+    if len(key_sets) != 1:
+        raise ValueError(
+            f"expand_grid: bloques con ejes distintos: {[sorted(b) for b in blocks]}"
+        )
+    for b in blocks:
+        for axis, vals in b.items():
+            if not vals:
+                raise ValueError(f"expand_grid: eje '{axis}' vacío.")
+    seen: set[str] = set()
+    points: list[dict[str, Any]] = []
+    for block in blocks:
+        keys = list(block)
+        for combo in itertools.product(*(block[k] for k in keys)):
+            point = dict(zip(keys, combo))
+            cid = make_config_id(point)
+            if cid not in seen:
+                seen.add(cid)
+                points.append(point)
+    return points
+
+
 def _sum_timing(timing: dict[str, float], keys: list[str]) -> float:
     return float(sum(float(timing.get(key, 0.0)) for key in keys))
 
@@ -230,11 +267,7 @@ class SweepRunner:
     # ------------------------------------------------------------------
 
     def _expand_grid(self) -> list[dict[str, Any]]:
-        """Producto cartesiano del grid de hiperparámetros."""
-        grid: dict[str, list] = self._cfg["grid"]
-        keys = list(grid.keys())
-        values = list(grid.values())
-        return [dict(zip(keys, combo)) for combo in itertools.product(*values)]
+        return expand_grid(_resolve_grid_spec(self._cfg))
 
     def _run_single(
         self,

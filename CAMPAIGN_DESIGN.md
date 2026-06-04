@@ -198,9 +198,7 @@ Rebalanceado a lr×hidden.
   matplotlib + pandas. `io` lee CSV (interfaz tabular común a todos los runners).
   Figuras F1–F7 en `results/final_campaign/frontier/figs/`.
 - **Memoria**: borrador LaTeX de la sección de frontera (`frontera_estabilidad.tex`,
-  fuera del repo). Estructura propuesta de capítulos finales:
-  **Análisis dinámico (frontera + regiones) → Resultados experimentales (configs→errores)
-  → Discusión → Conclusiones** (sustituye a resultados→discusión→conclusiones).
+  fuera del repo).
 
 ### Regiones candidatas para el sweep (fijadas, R³; α≈1 salvo R4)
 - **R1 contractiva ref.**: ρ∈[0.6,0.9], s_in∈[0.05,0.2] — olvido rápido, casi lineal.
@@ -221,6 +219,10 @@ Rebalanceado a lr×hidden.
   caption F7 en el .tex tras rehacerla.
 - Secundario (opcional, redondear cap. dilución): frontera del leak a T escalado
   ~1/α si se quiere resolver su localización.
+
+
+### Limitaciones
+- NARMA10 estándar inestable para L largos; train acotado a 2400/600/1000 (total 7000) para mantener finitas las 7 semillas; fix de fondo = NARMA10 acotado con tanh, bugfix futuro
 
 ---
 

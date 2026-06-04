@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from rc_lab.runners.multitask_sweep_runner import MultiTaskSweepRunner, MultiTaskSweepSummary
+from rc_lab.runners.sweep_runner import _resolve_grid_spec
 from rc_lab.utils.io import make_json_safe
 
 
@@ -44,7 +45,8 @@ def build_design_config(
     ----------
     base_cfg:
         Configuración base del ``DesignComparisonRunner`` (contiene ``sweep``,
-        ``designs``, ``grid``, ``tasks``, ``readout``, ``metrics``, ``ranking``).
+        ``designs``, ``grid`` o ``grids``, ``tasks``, ``readout``, ``metrics``,
+        ``ranking``).
     design:
         Entrada de la lista ``designs`` con al menos las claves ``name`` y
         ``reservoir``.
@@ -62,7 +64,7 @@ def build_design_config(
                 "seeds": base_seeds,
             },
             "reservoir": design["reservoir"],
-            "grid": base_grid,
+            "grid": base_grid,        # o "grids": base_grid_blocks
             "tasks": base_tasks,
             "readout": base_readout,
             "metrics": base_metrics,
@@ -75,7 +77,7 @@ def build_design_config(
     - ``sweep.output_dir`` == ``{base_output_dir}/{design_name}``
     - ``sweep.seeds``      == ``base_cfg["sweep"]["seeds"]`` (sin modificación)
     - ``reservoir``        == ``design["reservoir"]``
-    - ``grid``, ``tasks``, ``readout``, ``metrics``, ``ranking`` se propagan
+    - ``grid`` o ``grids``, ``tasks``, ``readout``, ``metrics``, ``ranking`` se propagan
       sin modificación desde ``base_cfg``.
     - ``diagnostics`` se propaga desde ``base_cfg`` si está presente, para que
       ``transient_kmax`` sea consistente en todos los runners (Requisito 11.1).
@@ -94,12 +96,16 @@ def build_design_config(
             "seeds": base_seeds,
         },
         "reservoir": design["reservoir"],
-        "grid": base_cfg["grid"],
         "tasks": base_cfg["tasks"],
         "readout": base_cfg["readout"],
         "metrics": base_cfg["metrics"],
         "ranking": base_cfg["ranking"],
     }
+
+    if "grids" in base_cfg:
+        cfg["grids"] = base_cfg["grids"]
+    else:
+        cfg["grid"] = base_cfg["grid"]
 
     # Propagate diagnostics block if present (Requisito 11.1)
     if "diagnostics" in base_cfg:
@@ -129,7 +135,8 @@ class DesignComparisonRunner:
         Configuración del experimento de comparación. Debe contener:
         - ``sweep``: ``name``, ``output_dir``, ``seeds``
         - ``designs``: lista de dicts con ``name`` y ``reservoir``
-        - ``grid``, ``tasks``, ``readout``, ``metrics``, ``ranking``
+        - exactamente uno de ``grid`` o ``grids``
+        - ``tasks``, ``readout``, ``metrics``, ``ranking``
     """
 
     def __init__(self, cfg: dict[str, Any]) -> None:
@@ -146,7 +153,7 @@ class DesignComparisonRunner:
         self._designs: list[dict[str, Any]] = cfg["designs"]
 
         # Bloques compartidos entre diseños
-        self._grid: dict[str, list] = cfg["grid"]
+        self._grid_spec: dict | list[dict] = _resolve_grid_spec(cfg)
         self._tasks: dict[str, Any] = cfg["tasks"]
         self._readout: dict[str, Any] = cfg["readout"]
         self._metrics: list[str] = cfg["metrics"]
@@ -158,12 +165,13 @@ class DesignComparisonRunner:
 
     def _validate_config(self, cfg: dict[str, Any]) -> None:
         """Valida la config del DesignComparisonRunner antes de ejecutar."""
-        required_keys = ("sweep", "designs", "grid", "tasks", "readout", "metrics", "ranking")
+        required_keys = ("sweep", "designs", "tasks", "readout", "metrics", "ranking")
         for key in required_keys:
             if key not in cfg:
                 raise ValueError(
                     f"Config de DesignComparisonRunner: falta el bloque requerido '{key}'"
                 )
+        _resolve_grid_spec(cfg)
 
         # sweep
         sweep = cfg["sweep"]
@@ -679,5 +687,11 @@ class DesignComparisonRunner:
 
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(json_payload, f, indent=2, ensure_ascii=False, default=_json_default, allow_nan=False)
+
+        try:
+            from rc_lab.analysis.task_rankings import save_task_rankings
+            save_task_rankings(json_payload, self._output_dir, top_n=20)
+        except Exception as exc:  # pragma: no cover - post-hoc analysis must not fail runs
+            print(f"task_rankings post-processing skipped: {exc}")
 
         return csv_path, json_path

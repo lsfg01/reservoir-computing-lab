@@ -1,0 +1,62 @@
+sweep:
+  name: test_grid_union
+  output_dir: results/prelim_study/sweeps/test_grid_union
+  seeds: [42]
+
+reservoir:
+  type: random_sparse
+  N: 50
+  sparsity: 0.9
+  bias_scaling: 0.0
+
+# Dos bloques: union deduplicada → 3 configs
+# Bloque A: rho=[0.7, 0.9], Bloque B: rho=[0.9, 1.1] → solapamiento en 0.9
+grids:
+  - spectral_radius: [0.7, 0.9]
+    input_scaling: [0.1]
+    leak_rate: [1.0]
+  - spectral_radius: [0.9, 1.1]
+    input_scaling: [0.1]
+    leak_rate: [1.0]
+
+tasks:
+  narma10:
+    n_train: 600
+    n_val: 200
+    n_test: 200
+    washout: 100
+    state_policy: reset
+
+  mackey_glass:
+    n_train: 600
+    n_val: 200
+    n_test: 200
+    washout: 100
+    state_policy: reset
+
+  memory_capacity:
+    washout: 100
+    input_length: 800
+    fit_fraction: 0.5
+    kmax: 50
+    ridge_param: 1.0e-6
+
+readout:
+  type: ridge
+  features: states
+  ridge_candidates: [1.0e-6, 1.0e-4, 1.0e-2]
+
+metrics:
+  - nmse
+
+ranking:
+  shortlist_top_n: 3
+  narma10:
+    metric: nmse
+    direction: min
+  mackey_glass:
+    metric: nmse
+    direction: min
+  memory_capacity:
+    metric: mc_total
+    direction: max

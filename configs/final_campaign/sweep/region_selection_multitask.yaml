@@ -1,0 +1,122 @@
+# region_selection_multitask.yaml — Sweep de seleccion de region (Paso 1, campana final)
+#
+# Barre la UNION de las regiones cerradas R1-R4 (bloques A/B1/B2/C), no una caja.
+# REQUIERE el enhancement de union de grids en el runner (clave `grids:`).
+# Total esperado tras dedup: 88 configs (A 42 + B1 10 + B2 6 + C 30).
+#
+# Familia unica random_sparse, N=100 — coherente con el estudio de frontera
+# (mismas semillas, misma sparsity), de modo que las curvas rho*(s_in,alpha)
+# que motivan los puntos de control aplican directamente.
+#
+# LIMITACION CONOCIDA (NARMA10): la recurrencia estandar de NARMA10 es solo
+# condicionalmente estable; ~4% de semillas divergen para series largas, y la
+# semilla 4096 explota por encima de T~7700. Se acota la longitud de las tareas
+# predictivas (train uniforme) para mantener las 7 semillas de campana finitas
+# con margen. El arreglo de fondo (NARMA10 acotado con tanh) queda como posible
+# bugfix futuro; si se adopta, debe aplicarse consistente en sweep/design/externa
+# y recomputar el base case de persistencia.
+
+sweep:
+  name: region_selection_multitask_v1
+  output_dir: results/final_campaign/sweep
+  seeds: [42, 123, 456, 789, 1024, 2048, 4096]   # 7 semillas de campana
+
+reservoir:
+  type: random_sparse
+  N: 100
+  sparsity: 0.9
+  bias_scaling: 0.0
+  # spectral_radius, input_scaling y leak_rate se barren en grids[]
+
+# --- UNION de regiones (R1-R4) ---------------------------------------------
+# Todos los bloques declaran los MISMOS ejes (requisito del runner: config_id =
+# hash del config_point). Valores en float (1.0, no 1) para que el dedup por
+# config_id funcione entre bloques.
+grids:
+  # A — Región clásica de compromiso: memoria/NARMA/aggregate rank.
+  # Bajo input, rho cerca de 1, leak alto. Incluye rho=0.8 como control subcrítico.
+  - spectral_radius: [0.8, 0.9, 0.95, 1.0, 1.05]
+    input_scaling:   [0.05, 0.1, 0.2]
+    leak_rate:       [0.9, 1.0]
+
+  # B1 — Frontera desplazada por input medio-alto, leak alto.
+  # No se busca un puente leaky, sino estudiar el efecto puro del drive alto.
+  - spectral_radius: [1.0, 1.2, 1.4]
+    input_scaling:   [0.4, 0.8, 1.0]
+    leak_rate:       [0.9, 1.0]
+
+  # B2 — Extremo de frontera desplazada.
+  # Se incluye rho=1.5 solo para s_in=1.5, donde el diagnóstico de frontera lo hacía razonable.
+  - spectral_radius: [1.0, 1.2, 1.4, 1.5]
+    input_scaling:   [1.5]
+    leak_rate:       [0.9, 1.0]
+
+  # C — Región especialista no lineal con fuga.
+  # Input medio/alto y leak bajo: región que favorece Mackey-Glass,
+  # aunque penalice MC y NARMA.
+  - spectral_radius: [0.8, 1.0, 1.2, 1.4]
+    input_scaling:   [0.4, 0.8, 1.0, 1.5]
+    leak_rate:       [0.3, 0.5]
+
+tasks:
+  # Conjunto train acotado y UNIFORME en las dos tareas predictivas (2400/600/1000).
+  # Motivado por la inestabilidad de NARMA10 (ver cabecera): total NARMA = 3*washout
+  # + 2400+600+1000 = 7000 < umbral de divergencia (~7700 para la semilla 4096).
+  narma10:
+    n_train: 2400
+    n_val: 600
+    n_test: 1000
+    washout: 1000          # transitorio del lab, validado para alpha>=0.5;
+                           # limpia el interior (cresta de memoria ~750 pasos) y
+                           # deja que los controles de frontera rindan mal de
+                           # forma legitima.
+    state_policy: reset
+
+  mackey_glass:
+    n_train: 2400
+    n_val: 600
+    n_test: 1000
+    washout: 1000
+    state_policy: reset
+    # MG es un atractor acotado: no diverge. Se uniformiza el train por coherencia.
+    # Formulacion ACTUAL de MG (identica a sanity/benchmark/campana).
+    tau: 17
+    dt: 0.1
+    beta: 0.2
+    gamma: 0.1
+    n: 10
+    prediction_horizon: 84        # ~4.9*tau, horizonte largo real (serie submuestreada)
+    sample_stride: 10
+    discard_transient: 1000
+    initial_history: random_uniform
+    history_low: 1.1
+    history_high: 1.3
+
+  memory_capacity:
+    washout: 1000          # consistente con las tareas predictivas
+    input_length: 6000     # ajuste ~2500 tras washout (fit_fraction 0.5), en linea
+                           # con n_train=2400; MC no diverge y aprovecha muestras.
+    fit_fraction: 0.5
+    kmax: 100              # = N (no 200, que diluye con N=100)
+    ridge_param: 1.0e-6
+
+readout:
+  type: ridge
+  features: states
+  ridge_candidates: [1.0e-10, 1.0e-8, 1.0e-6, 1.0e-4, 1.0e-2, 1.0]
+
+metrics:
+  - nmse
+  - rmse
+
+ranking:
+  shortlist_top_n: 12
+  narma10:
+    metric: nmse
+    direction: min
+  mackey_glass:
+    metric: nmse
+    direction: min
+  memory_capacity:
+    metric: mc_total
+    direction: max

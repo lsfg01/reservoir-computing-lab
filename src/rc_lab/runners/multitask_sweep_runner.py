@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from rc_lab.reservoirs.diagnostics import reservoir_diagnostics as _reservoir_diagnostics
+from rc_lab.runners.sweep_runner import _resolve_grid_spec, expand_grid
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +117,7 @@ class MultiTaskSweepSummary:
     sweep_name: str
     n_configs: int
     n_seeds: int
-    grid: dict[str, list]
+    grid: dict | list[dict]
     ranking_config: dict[str, RankingSpec]   # métrica primaria y dirección por tarea
     configs: list[MultiTaskConfigEntry]       # ordenados por aggregate_rank asc
     shortlist: list[str]                      # config_ids de la shortlist
@@ -188,6 +189,7 @@ def build_subtask_config(mt_config: dict[str, Any], task_name: str) -> dict[str,
     """
     task_params: dict[str, Any] = dict(mt_config["tasks"][task_name])
 
+    grid_key = "grids" if "grids" in mt_config else "grid"
     subtask_cfg: dict[str, Any] = {
         "sweep": {
             "name": f"{mt_config['sweep']['name']}_{task_name}",
@@ -199,7 +201,7 @@ def build_subtask_config(mt_config: dict[str, Any], task_name: str) -> dict[str,
             **task_params,
         },
         "reservoir": mt_config["reservoir"],
-        "grid": mt_config["grid"],
+        grid_key: mt_config[grid_key],
         "readout": mt_config["readout"],
         "metrics": mt_config["metrics"],
     }
@@ -479,7 +481,7 @@ class MultiTaskSweepRunner:
         self._sweep_name: str = sweep_config["sweep"]["name"]
         self._output_dir = Path(sweep_config["sweep"]["output_dir"])
         self._seeds: list[int] = sweep_config["sweep"]["seeds"]
-        self._grid: dict[str, list] = sweep_config["grid"]
+        self._grid_spec: dict | list[dict] = _resolve_grid_spec(sweep_config)
         self._res_cfg: dict[str, Any] = sweep_config["reservoir"]
         self._metrics: list[str] = sweep_config["metrics"]
 
@@ -519,9 +521,11 @@ class MultiTaskSweepRunner:
     def _validate_config(self, cfg: dict[str, Any]) -> None:
         """Valida la config multi-tarea antes de ejecutar ninguna corrida."""
         # Bloques de primer nivel requeridos
-        for key in ("sweep", "reservoir", "grid", "tasks", "readout", "metrics", "ranking"):
+        for key in ("sweep", "reservoir", "tasks", "readout", "metrics", "ranking"):
             if key not in cfg:
                 raise ValueError(f"Config multi-tarea: falta el bloque requerido '{key}'")
+        # XOR grid/grids + validación de ejes uniformes y valores no vacíos (fail-fast)
+        expand_grid(_resolve_grid_spec(cfg))
 
         # seeds
         if "seeds" not in cfg["sweep"] or not cfg["sweep"]["seeds"]:
@@ -628,7 +632,7 @@ class MultiTaskSweepRunner:
             sweep_name=self._sweep_name,
             n_configs=mt_summary.n_configs,
             n_seeds=mt_summary.n_seeds,
-            grid=self._grid,
+            grid=self._grid_spec,
             ranking_config=mt_summary.ranking_config,
             configs=mt_summary.configs,
             shortlist=mt_summary.shortlist,
@@ -715,8 +719,4 @@ class MultiTaskSweepRunner:
         return mc_runs
 
     def _expand_grid(self) -> list[dict[str, Any]]:
-        """Producto cartesiano del grid de hiperparámetros."""
-        import itertools
-        keys = list(self._grid.keys())
-        values = list(self._grid.values())
-        return [dict(zip(keys, combo)) for combo in itertools.product(*values)]
+        return expand_grid(self._grid_spec)

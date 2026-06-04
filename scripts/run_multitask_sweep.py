@@ -11,20 +11,14 @@ Uso:
 """
 
 import argparse
-import itertools
 import sys
 from pathlib import Path
 
 # Asegurar que src/ está en el path cuando se ejecuta como script
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from rc_lab.runners.sweep_runner import _resolve_grid_spec, expand_grid
 from rc_lab.utils.io import load_config
-
-
-def expand_grid(grid: dict) -> list[dict]:
-    keys = list(grid.keys())
-    values = list(grid.values())
-    return [dict(zip(keys, combo)) for combo in itertools.product(*values)]
 
 
 def main() -> None:
@@ -45,13 +39,13 @@ def main() -> None:
 
     # --- Dry-run ---
     if args.dry_run:
-        grid = expand_grid(config["grid"])
+        grid_points = expand_grid(_resolve_grid_spec(config))
         seeds = config["sweep"]["seeds"]
         n_tasks = 3
-        print(f"Configuraciones: {len(grid)}")
+        print(f"Configuraciones: {len(grid_points)}")
         print(f"Seeds:           {len(seeds)}")
-        print(f"Total corridas:  {len(grid)} x {len(seeds)} x {n_tasks} tareas = "
-              f"{len(grid) * len(seeds) * n_tasks}")
+        print(f"Total corridas:  {len(grid_points)} x {len(seeds)} x {n_tasks} tareas = "
+              f"{len(grid_points) * len(seeds) * n_tasks}")
         return
 
     # --- Ejecución completa ---
