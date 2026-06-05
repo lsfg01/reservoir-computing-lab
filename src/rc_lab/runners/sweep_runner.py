@@ -110,6 +110,31 @@ def _resolve_grid_spec(cfg: dict[str, Any]) -> "dict | list[dict]":
     return cfg["grids"] if has_grids else cfg["grid"]
 
 
+def validate_esn_ridge_location(
+    grid_spec: "dict | list[dict]",
+    readout_cfg: dict[str, Any],
+    *,
+    owner: str = "ESN config",
+) -> None:
+    """Fail fast when ESN ridge is specified both globally and per candidate."""
+    if "ridge_candidates" not in readout_cfg:
+        return
+    blocks = [grid_spec] if isinstance(grid_spec, dict) else list(grid_spec)
+    offending_blocks = [
+        index
+        for index, block in enumerate(blocks)
+        if isinstance(block, dict) and "ridge_param" in block
+    ]
+    if not offending_blocks:
+        return
+    where = "grid" if isinstance(grid_spec, dict) else f"grids blocks {offending_blocks}"
+    raise ValueError(
+        f"{owner}: ridge_param in an ESN candidate {where} is ambiguous when "
+        "readout.ridge_candidates is defined. For ESN, readout.ridge_candidates "
+        "is the only valid ridge location; remove ridge_param from grid/grids."
+    )
+
+
 def expand_grid(grid_spec: "dict | list[dict]") -> list[dict[str, Any]]:
     """dict → producto cartesiano clásico. list[dict] → unión de cajas,
     concatenada y deduplicada por config_id conservando primera aparición."""
@@ -221,6 +246,12 @@ class SweepRunner:
         readout_cfg = sweep_config["readout"]
         self._ridge_candidates: list[float] = readout_cfg["ridge_candidates"]
         self._readout_mode: ReadoutMode = readout_cfg.get("features", "states")
+        self._grid_spec: dict | list[dict] = _resolve_grid_spec(sweep_config)
+        validate_esn_ridge_location(
+            self._grid_spec,
+            readout_cfg,
+            owner=f"SweepRunner {self._sweep_name!r}",
+        )
 
         self._metric_names: list[str] = sweep_config.get("metrics", ["nmse"])
         self._primary_metric: str = sweep_config.get("primary_metric", self._task.primary_metric)
@@ -267,7 +298,7 @@ class SweepRunner:
     # ------------------------------------------------------------------
 
     def _expand_grid(self) -> list[dict[str, Any]]:
-        return expand_grid(_resolve_grid_spec(self._cfg))
+        return expand_grid(self._grid_spec)
 
     def _run_single(
         self,
@@ -362,12 +393,7 @@ class SweepRunner:
 
             # Selección de ridge_param por validación
             with timer() as t_ridge:
-                ridge_candidates = (
-                    [config_point["ridge_param"]]
-                    if "ridge_param" in config_point
-                    else self._ridge_candidates
-                )
-                selector = RidgeParamSelector(ridge_candidates)
+                selector = RidgeParamSelector(self._ridge_candidates)
                 ridge_result: RidgeSelectionResult = selector.select(
                     F_train, Y_train, F_val, Y_val
                 )

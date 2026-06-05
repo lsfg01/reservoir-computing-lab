@@ -1,0 +1,263 @@
+# external_final_esn_vs_rnn_lstm.yaml
+# Paso 4 — Comparación externa final: ESN seleccionadas vs Simple RNN/LSTM/TappedDelayRidge.
+#
+# Selección ESN: curación por validación desde la capa de design, con 6 candidatos
+# por familia para igualar el presupuesto de validación de RNN/LSTM.
+#
+# NOTA DE IMPLEMENTACIÓN:
+#   Este YAML usa `candidates:` para las familias ESN porque los 6 puntos son una
+#   lista curada, no un producto cartesiano limpio. Si el runner externo aún solo
+#   acepta `grid:`, aplicar el mismo helper de expansión usado en sweep/design:
+#   - si existe `candidates`, usar esa lista directamente como config_points;
+#   - si existe `grid`, expandir producto cartesiano como hasta ahora.
+
+sweep:
+  name: external_final_esn_vs_rnn_lstm
+  output_dir: results/final_campaign/external/external_final_esn_vs_rnn_lstm
+  seeds: [42, 123, 456, 789, 1024, 2048, 4096]
+
+comparison:
+  n_candidates_per_model: 6
+  allow_unequal_candidate_counts: false
+  use_test_for_selection: false
+  device: cpu
+
+models:
+  # -------------------------------------------------------------------------
+  # ESN / Reservoir Computing families selected from the design layer.
+  # All run on all tasks. Specialization is analyzed a posteriori by task.
+  # -------------------------------------------------------------------------
+
+  - name: random_sparse_baseline
+    kind: esn
+    reservoir:
+      type: random_sparse
+      N: 100
+      sparsity: 0.9
+      bias_scaling: 0.0
+    candidates:
+      # memory: 9992b49ddf96
+      - {spectral_radius: 0.95, input_scaling: 0.05, leak_rate: 1.0}
+      # narma/all-round: 0e41bf66b8bb
+      - {spectral_radius: 0.95, input_scaling: 0.1, leak_rate: 0.9}
+      # compromise/NARMA-MG balance: 4d2160951482
+      - {spectral_radius: 1.0, input_scaling: 0.2, leak_rate: 0.9}
+      # transition: 4e018c35c4e2
+      - {spectral_radius: 1.0, input_scaling: 0.4, leak_rate: 0.9}
+      # MG moderate, preferred over extreme for robustness: 156770123aaf
+      - {spectral_radius: 1.2, input_scaling: 1.0, leak_rate: 0.3}
+      # MG extreme demonstrator: b07b757cf213
+      - {spectral_radius: 1.4, input_scaling: 1.5, leak_rate: 0.3}
+
+  - name: cycle_scr
+    kind: esn
+    reservoir:
+      type: cycle
+      N: 100
+      cycle_weight: 1.0
+      bias_scaling: 0.0
+    candidates:
+      # memory champion: 9992b49ddf96
+      - {spectral_radius: 0.95, input_scaling: 0.05, leak_rate: 1.0}
+      # memory/high-persistence neighbor
+      - {spectral_radius: 1.0, input_scaling: 0.05, leak_rate: 1.0}
+      # NARMA honest coverage: 259248d07a08
+      - {spectral_radius: 0.95, input_scaling: 0.2, leak_rate: 0.9}
+      # compromise/control: 4d2160951482
+      - {spectral_radius: 1.0, input_scaling: 0.2, leak_rate: 0.9}
+      # MG moderate control
+      - {spectral_radius: 1.0, input_scaling: 1.0, leak_rate: 0.3}
+      # MG selected: b07b757cf213
+      - {spectral_radius: 1.4, input_scaling: 1.5, leak_rate: 0.3}
+
+  - name: cycle_jump_j7
+    kind: esn
+    reservoir:
+      type: cycle_jump
+      N: 100
+      jumps: [7]
+      jump_weight: 0.3
+      cycle_weight: 1.0
+      bias_scaling: 0.0
+    candidates:
+      # memory: 9992b49ddf96
+      - {spectral_radius: 0.95, input_scaling: 0.05, leak_rate: 1.0}
+      # NARMA: 96af7170b8b0
+      - {spectral_radius: 1.0, input_scaling: 0.1, leak_rate: 0.9}
+      # compromise: 4d2160951482
+      - {spectral_radius: 1.0, input_scaling: 0.2, leak_rate: 0.9}
+      # aggregate/balanced winner: 4e018c35c4e2
+      - {spectral_radius: 1.0, input_scaling: 0.4, leak_rate: 0.9}
+      # MG moderate control
+      - {spectral_radius: 1.2, input_scaling: 1.0, leak_rate: 0.3}
+      # MG selected for j7: b07b757cf213
+      - {spectral_radius: 1.4, input_scaling: 1.5, leak_rate: 0.3}
+
+  - name: nonnormal_chain_g0_3
+    kind: esn
+    reservoir:
+      type: nonnormal_chain
+      N: 100
+      chain_strength: 0.3
+      bias_scaling: 0.0
+    candidates:
+      # stable coverage / memory-NARMA honest candidate: 9e51842d34ab
+      - {spectral_radius: 0.95, input_scaling: 0.2, leak_rate: 1.0}
+      # NARMA-ish stable control
+      - {spectral_radius: 0.95, input_scaling: 0.1, leak_rate: 0.9}
+      # compromise stable control: 259248d07a08
+      - {spectral_radius: 0.95, input_scaling: 0.2, leak_rate: 0.9}
+      # compromise stable control: 4d2160951482
+      - {spectral_radius: 1.0, input_scaling: 0.2, leak_rate: 0.9}
+      # MG selected for g0.3, drive medio/leak alto: 4e018c35c4e2
+      - {spectral_radius: 1.0, input_scaling: 0.4, leak_rate: 0.9}
+      # MG neighbor; avoids the high-drive leaky corner where g0.3 collapses
+      - {spectral_radius: 1.0, input_scaling: 0.4, leak_rate: 0.5}
+
+  - name: multiscale_three_random
+    kind: esn
+    reservoir:
+      type: multiscale
+      N: 100
+      preset: three_scale_random
+      sparsity: 0.9
+      coupling_strength: 0.05
+      coupling_density: 0.2
+      coupling_mode: adjacent
+      coupling_direction: bidirectional
+      bias_scaling: 0.0
+    candidates:
+      # memory: 9992b49ddf96
+      - {spectral_radius: 0.95, input_scaling: 0.05, leak_rate: 1.0}
+      # NARMA neighbor: 259248d07a08
+      - {spectral_radius: 0.95, input_scaling: 0.2, leak_rate: 0.9}
+      # NARMA selected: 4d2160951482
+      - {spectral_radius: 1.0, input_scaling: 0.2, leak_rate: 0.9}
+      # transition/control: 4e018c35c4e2
+      - {spectral_radius: 1.0, input_scaling: 0.4, leak_rate: 0.9}
+      # MG moderate control
+      - {spectral_radius: 1.2, input_scaling: 1.0, leak_rate: 0.3}
+      # MG selected for multiscale_three: 059a4ddb8c9d
+      - {spectral_radius: 1.4, input_scaling: 1.0, leak_rate: 0.3}
+
+  # -------------------------------------------------------------------------
+  # External trainable baselines. 6 candidates each: 3 learning rates × 2 sizes.
+  # -------------------------------------------------------------------------
+
+  - name: simple_rnn
+    kind: torch_simple_rnn
+    grid:
+      hidden_size: [64, 128]
+      learning_rate: [1.0e-2, 3.0e-3, 1.0e-3]
+      weight_decay: [0.0]
+      bptt_length: [200]
+      batch_size: [32]
+      num_layers: [1]
+      max_epochs: [800]
+      patience: [50]
+      grad_clip: [1.0]
+      training_mode: [windowed]
+      window_stride: [50]
+      window_washout: [auto]
+      normalize_inputs: [true]
+      normalize_targets: [true]
+      max_train_seconds_per_run: [null]
+
+  - name: lstm
+    kind: torch_lstm
+    grid:
+      hidden_size: [64, 128]
+      learning_rate: [1.0e-2, 3.0e-3, 1.0e-3]
+      weight_decay: [0.0]
+      bptt_length: [200]
+      batch_size: [32]
+      num_layers: [1]
+      dropout: [0.0]
+      max_epochs: [800]
+      patience: [50]
+      grad_clip: [1.0]
+      training_mode: [windowed]
+      window_stride: [50]
+      window_washout: [auto]
+      normalize_inputs: [true]
+      normalize_targets: [true]
+      max_train_seconds_per_run: [null]
+
+  - name: tapped_delay_ridge
+    kind: tapped_delay_ridge
+    grid:
+      n_lags: [10, 25, 50]
+      feature_mode: [raw, quadratic]
+      ridge_param: [1.0e-6]
+
+tasks:
+  delay_recall:
+    enabled: true
+    name: delay_recall
+    n_train: 2400
+    n_val: 600
+    n_test: 1000
+    washout: 1000
+    kmax: 100
+    input_low: -1.0
+    input_high: 1.0
+    state_policy: reset
+
+  narma10:
+    enabled: true
+    name: narma10
+    n_train: 2400
+    n_val: 600
+    n_test: 1000
+    washout: 1000
+    state_policy: reset
+
+  mackey_glass:
+    enabled: true
+    name: mackey_glass
+    n_train: 2400
+    n_val: 600
+    n_test: 1000
+    washout: 1000
+    state_policy: reset
+    tau: 17
+    dt: 0.1
+    beta: 0.2
+    gamma: 0.1
+    n: 10
+    initial_history: random_uniform
+    history_low: 1.1
+    history_high: 1.3
+    discard_transient: 1000
+    sample_stride: 10
+    prediction_horizon: 84
+
+readout:
+  type: ridge
+  features: states
+  ridge_candidates: [1.0e-10, 1.0e-8, 1.0e-6, 1.0e-4, 1.0e-2, 1.0]
+
+metrics:
+  common: [nmse, rmse]
+  memory:
+    - memory_corr_total
+    - memory_eff_total
+    - corr2_by_delay
+    - nmse_by_delay
+    - max_delay_corr_above_threshold
+
+ranking:
+  delay_recall:
+    metric: memory_corr_total
+    direction: max
+
+  narma10:
+    metric: nmse
+    direction: min
+
+  mackey_glass:
+    metric: nmse
+    direction: min
+
+diagnostics:
+  transient_kmax: 150

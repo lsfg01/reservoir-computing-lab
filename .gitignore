@@ -41,6 +41,15 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
+# Local context notes
+
+CAMPAIGN_DESIGN.md
+CANDIDATE_SELECTION_REVIEW.md
+
+# Local notebooks
+sanity_check_rnn_lstm.ipynb
+cost_benchmark.ipynb
+
 # Results (generated artifacts — keep .gitkeep files)
 results/**/runs/
 results/**/*.json

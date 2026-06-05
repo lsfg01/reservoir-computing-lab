@@ -15,7 +15,11 @@ from pathlib import Path
 from typing import Any
 
 from rc_lab.reservoirs.diagnostics import reservoir_diagnostics as _reservoir_diagnostics
-from rc_lab.runners.sweep_runner import _resolve_grid_spec, expand_grid
+from rc_lab.runners.sweep_runner import (
+    _resolve_grid_spec,
+    expand_grid,
+    validate_esn_ridge_location,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -525,7 +529,13 @@ class MultiTaskSweepRunner:
             if key not in cfg:
                 raise ValueError(f"Config multi-tarea: falta el bloque requerido '{key}'")
         # XOR grid/grids + validación de ejes uniformes y valores no vacíos (fail-fast)
-        expand_grid(_resolve_grid_spec(cfg))
+        grid_spec = _resolve_grid_spec(cfg)
+        expand_grid(grid_spec)
+        validate_esn_ridge_location(
+            grid_spec,
+            cfg["readout"],
+            owner="MultiTaskSweepRunner",
+        )
 
         # seeds
         if "seeds" not in cfg["sweep"] or not cfg["sweep"]["seeds"]:

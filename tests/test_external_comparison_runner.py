@@ -67,7 +67,6 @@ def _minimal_external_config(tmp_path: Path, *, enable_narma10: bool = False) ->
                     "spectral_radius": [0.5, 0.8],
                     "input_scaling": [0.2],
                     "leak_rate": [1.0],
-                    "ridge_param": [1.0e-6],
                 },
             },
             {
@@ -114,6 +113,46 @@ def test_fairness_validation_rejects_wrong_candidate_count(tmp_path):
     cfg["models"][1]["grid"]["n_lags"] = [1]
     with pytest.raises(ValueError, match="expected 2"):
         ExternalComparisonRunner(cfg)
+
+
+@pytest.mark.parametrize("candidate_style", ["grid", "candidates"])
+def test_external_esn_candidate_ridge_param_rejected_with_readout_candidates(
+    tmp_path,
+    candidate_style,
+):
+    cfg = _minimal_external_config(tmp_path)
+    esn_model = cfg["models"][0]
+    if candidate_style == "grid":
+        esn_model["grid"]["ridge_param"] = [1.0e-6]
+    else:
+        esn_model.pop("grid")
+        esn_model["candidates"] = [
+            {
+                "spectral_radius": 0.5,
+                "input_scaling": 0.2,
+                "leak_rate": 1.0,
+                "ridge_param": 1.0e-6,
+            }
+        ]
+
+    with pytest.raises(ValueError, match="readout\\.ridge_candidates"):
+        ExternalComparisonRunner(cfg)
+
+
+def test_external_esn_candidates_direct_points_are_counted(tmp_path):
+    cfg = _minimal_external_config(tmp_path)
+    esn_model = cfg["models"][0]
+    esn_model.pop("grid")
+    esn_model["candidates"] = [
+        {"spectral_radius": 0.5, "input_scaling": 0.2, "leak_rate": 1.0},
+        {"spectral_radius": 0.8, "input_scaling": 0.2, "leak_rate": 1.0},
+    ]
+
+    payload = ExternalComparisonRunner(cfg).dry_run()
+
+    row = next(model for model in payload["models"] if model["name"] == "random_sparse")
+    assert row["n_candidates"] == 2
+    assert row["candidate_spec"] == esn_model["candidates"]
 
 
 def test_external_comparison_smoke_persists_expected_structure(tmp_path):

@@ -19,9 +19,8 @@ models:
       bias_scaling: 0.0
     grid:
       spectral_radius: [0.8, 1.0]
-      input_scaling: [0.1, 0.2]
+      input_scaling: [0.05, 0.1, 0.2, 0.4]
       leak_rate: [0.5, 1.0]
-      ridge_param: [1.0e-6, 1.0e-4]
 
   - name: cycle_jump
     kind: esn
@@ -34,9 +33,8 @@ models:
       bias_scaling: 0.0
     grid:
       spectral_radius: [0.8, 1.0]
-      input_scaling: [0.1, 0.2]
+      input_scaling: [0.05, 0.1, 0.2, 0.4]
       leak_rate: [0.5, 1.0]
-      ridge_param: [1.0e-6, 1.0e-4]
 
   - name: nonnormal_chain
     kind: esn
@@ -49,7 +47,6 @@ models:
       input_scaling: [0.1, 0.2]
       leak_rate: [0.5, 1.0]
       chain_strength: [0.1, 0.3]
-      ridge_param: [1.0e-6]
 
   - name: simple_rnn
     kind: torch_simple_rnn

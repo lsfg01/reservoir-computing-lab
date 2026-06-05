@@ -27,6 +27,7 @@ import pytest
 import yaml
 
 from rc_lab.runners.sweep_runner import (
+    SweepRunner,
     _resolve_grid_spec,
     expand_grid,
     make_config_id,
@@ -198,6 +199,42 @@ class TestResolveGridSpec:
         cfg = {"sweep": {}}
         with pytest.raises(ValueError, match="exactamente uno"):
             _resolve_grid_spec(cfg)
+
+
+@pytest.mark.parametrize(
+    "grid_key, grid_spec",
+    [
+        ("grid", {"spectral_radius": [0.7], "input_scaling": [0.1], "ridge_param": [1e-6]}),
+        ("grids", [{"spectral_radius": [0.7], "input_scaling": [0.1], "ridge_param": [1e-6]}]),
+    ],
+)
+def test_sweep_runner_rejects_esn_candidate_ridge_param_with_readout_candidates(
+    tmp_path,
+    grid_key,
+    grid_spec,
+):
+    cfg = {
+        "sweep": {"name": "ridge_location", "output_dir": str(tmp_path), "seeds": [0]},
+        "task": {
+            "name": "narma10",
+            "n_train": 20,
+            "n_val": 10,
+            "n_test": 10,
+            "washout": 5,
+        },
+        "reservoir": {
+            "type": "random_sparse",
+            "N": 10,
+            "sparsity": 0.9,
+            "bias_scaling": 0.0,
+        },
+        grid_key: grid_spec,
+        "readout": {"type": "ridge", "features": "states", "ridge_candidates": [1e-6]},
+        "metrics": ["nmse"],
+    }
+
+    with pytest.raises(ValueError, match="readout\\.ridge_candidates"):
+        SweepRunner(cfg)
 
 
 # ---------------------------------------------------------------------------

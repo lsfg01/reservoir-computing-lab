@@ -73,6 +73,17 @@ def categorical_index(vals: list[float], value: float) -> float:
     return float(np.interp(float(value), ordered, positions))
 
 
+def heatmap_display_grid(grid2d: np.ndarray) -> np.ndarray:
+    """
+    Return the grid orientation used by heatmap_plane on the rendered axes.
+
+    pivot_plane returns rows with y descending, while heatmap_plane draws y
+    increasing upward. Text overlays must use this display-oriented grid so
+    annotations land on the same colored cell as their value.
+    """
+    return np.asarray(grid2d)[::-1].copy()
+
+
 def categorical_vline(
     ax: "plt.Axes",
     x_ticks: list[float],
@@ -121,7 +132,7 @@ def heatmap_plane(
     from matplotlib.patches import Rectangle
 
     y_asc = list(reversed(y_ticks))
-    grid_asc = grid2d[::-1].copy()
+    grid_asc = heatmap_display_grid(grid2d)
 
     x_centers = np.arange(len(x_ticks), dtype=float)
     y_centers = np.arange(len(y_asc), dtype=float)

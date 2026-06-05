@@ -11,7 +11,11 @@ import numpy as np
 from scipy.stats import rankdata
 
 from rc_lab.runners.runner import resolve_task
-from rc_lab.runners.sweep_runner import SweepSummary, make_config_id
+from rc_lab.runners.sweep_runner import (
+    SweepSummary,
+    make_config_id,
+    validate_esn_ridge_location,
+)
 from rc_lab.sequence_models.tapped_delay import TappedDelayRidge
 from rc_lab.sequence_models.training import compute_metrics
 from rc_lab.tasks.base import TaskData
@@ -43,6 +47,53 @@ def expand_grid(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
             raise ValueError(f"Grid entry {key!r} must be a non-empty list")
         values.append(raw)
     return [dict(zip(keys, combo, strict=True)) for combo in itertools.product(*values)]
+
+
+def expand_model_candidates(model: dict[str, Any]) -> list[dict[str, Any]]:
+    spec = _resolve_model_candidate_spec(model)
+    if "candidates" in model:
+        return _dedupe_candidate_points(spec, owner=f"Model {model['name']!r}")
+    return expand_grid(spec)
+
+
+def _resolve_model_candidate_spec(model: dict[str, Any]) -> Any:
+    has_grid = "grid" in model
+    has_candidates = "candidates" in model
+    if has_grid == has_candidates:
+        raise ValueError(
+            f"Model {model.get('name', '<unnamed>')!r} must define exactly one "
+            "of 'grid' or 'candidates'"
+        )
+    return model["candidates"] if has_candidates else model["grid"]
+
+
+def _dedupe_candidate_points(candidates: Any, *, owner: str) -> list[dict[str, Any]]:
+    if not isinstance(candidates, list) or not candidates:
+        raise ValueError(f"{owner} candidates must be a non-empty list")
+    seen: set[str] = set()
+    points: list[dict[str, Any]] = []
+    for index, raw in enumerate(candidates):
+        if not isinstance(raw, dict) or not raw:
+            raise ValueError(f"{owner} candidate at index {index} must be a non-empty mapping")
+        point = dict(raw)
+        config_id = make_config_id(point)
+        if config_id in seen:
+            continue
+        seen.add(config_id)
+        points.append(point)
+    return points
+
+
+def _candidate_grid_for_sweep(model: dict[str, Any]) -> dict[str, Any]:
+    if "grid" in model:
+        return {"grid": model["grid"]}
+    points = expand_model_candidates(model)
+    return {
+        "grids": [
+            {key: [value] for key, value in point.items()}
+            for point in points
+        ]
+    }
 
 
 class ExternalComparisonRunner:
@@ -79,16 +130,21 @@ class ExternalComparisonRunner:
         model_rows = []
         total_validations = 0
         for model in self._models:
-            n_candidates = len(expand_grid(model["grid"]))
+            n_candidates = len(expand_model_candidates(model))
             validations = n_candidates * len(self._seeds) * len(active_tasks)
             total_validations += validations
-            model_rows.append({
+            row = {
                 "name": model["name"],
                 "kind": model["kind"],
                 "n_candidates": n_candidates,
                 "candidate_validations": validations,
-                "grid": model["grid"],
-            })
+                "candidate_spec": _resolve_model_candidate_spec(model),
+            }
+            if "grid" in model:
+                row["grid"] = model["grid"]
+            else:
+                row["candidates"] = model["candidates"]
+            model_rows.append(row)
 
         payload = {
             "sweep_name": self._sweep_name,
@@ -177,6 +233,11 @@ class ExternalComparisonRunner:
             raise ValueError("models must be a non-empty list")
         target_candidates = comparison.get("n_candidates_per_model")
         allow_unequal = comparison.get("allow_unequal_candidate_counts", False)
+        readout_cfg = cfg.get("readout", {
+            "type": "ridge",
+            "features": "states",
+            "ridge_candidates": [1e-6],
+        })
         for idx, model in enumerate(models):
             if not model.get("enabled", True):
                 continue
@@ -186,7 +247,14 @@ class ExternalComparisonRunner:
                 raise ValueError(f"Unsupported model kind {model['kind']!r}")
             if model["kind"] == "esn" and "reservoir" not in model:
                 raise ValueError(f"ESN model {model['name']!r} must define reservoir")
-            n_candidates = len(expand_grid(model.get("grid", {})))
+            candidate_spec = _resolve_model_candidate_spec(model)
+            if model["kind"] == "esn":
+                validate_esn_ridge_location(
+                    candidate_spec,
+                    readout_cfg,
+                    owner=f"ExternalComparisonRunner model {model['name']!r}",
+                )
+            n_candidates = len(expand_model_candidates(model))
             if target_candidates is not None and not allow_unequal and n_candidates != target_candidates:
                 raise ValueError(
                     f"Model {model['name']!r} expands to {n_candidates} candidates, "
@@ -226,7 +294,6 @@ class ExternalComparisonRunner:
                 **self._tasks[task_name],
             },
             "reservoir": model["reservoir"],
-            "grid": model["grid"],
             "readout": self._cfg.get("readout", {
                 "type": "ridge",
                 "features": "states",
@@ -236,6 +303,7 @@ class ExternalComparisonRunner:
             "primary_metric": ranking["metric"],
             "primary_direction": ranking["direction"],
         }
+        sub_cfg.update(_candidate_grid_for_sweep(model))
         if "diagnostics" in self._cfg:
             sub_cfg["diagnostics"] = self._cfg["diagnostics"]
 
@@ -252,7 +320,7 @@ class ExternalComparisonRunner:
         runs_dir = task_dir / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
 
-        config_points = expand_grid(model["grid"])
+        config_points = expand_model_candidates(model)
         metric_names = self._metrics_for_task(task_name)
         runs_by_key: dict[tuple[str, int], dict[str, Any]] = {}
 

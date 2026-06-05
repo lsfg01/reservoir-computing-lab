@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from rc_lab.runners.multitask_sweep_runner import MultiTaskSweepRunner, MultiTaskSweepSummary
-from rc_lab.runners.sweep_runner import _resolve_grid_spec
+from rc_lab.runners.sweep_runner import _resolve_grid_spec, validate_esn_ridge_location
 from rc_lab.utils.io import make_json_safe
 
 
@@ -171,7 +171,12 @@ class DesignComparisonRunner:
                 raise ValueError(
                     f"Config de DesignComparisonRunner: falta el bloque requerido '{key}'"
                 )
-        _resolve_grid_spec(cfg)
+        grid_spec = _resolve_grid_spec(cfg)
+        validate_esn_ridge_location(
+            grid_spec,
+            cfg["readout"],
+            owner="DesignComparisonRunner",
+        )
 
         # sweep
         sweep = cfg["sweep"]
