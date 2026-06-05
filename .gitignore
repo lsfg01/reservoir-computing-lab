@@ -51,3 +51,12 @@ results/**/*.csv
 figures/
 *.png
 *.pdf
+*.svg
+*.jpg
+*.jpeg
+
+# Final campaign summaries kept in git
+!results/final_campaign/**/comparison_summary.csv
+!results/final_campaign/**/comparison_summary.json
+!results/final_campaign/**/task_rankings/
+!results/final_campaign/**/task_rankings/**

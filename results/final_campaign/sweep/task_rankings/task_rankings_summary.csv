@@ -1,0 +1,4 @@
+task,group_name,group_kind,task_global_rank,config_id,spectral_radius,input_scaling,leak_rate,task_val_metric,task_test_metric,global_aggregate_rank
+narma10,region_selection_multitask_v1,random_sparse,1,0e41bf66b8bb,0.95,0.1,0.9,0.09823604473795843,0.10603864638535014,26.333333333333332
+mackey_glass,region_selection_multitask_v1,random_sparse,1,b07b757cf213,1.4,1.5,0.3,0.011941754529942727,0.010960156964727552,54.0
+memory_capacity,region_selection_multitask_v1,random_sparse,1,9992b49ddf96,0.95,0.05,1.0,32.89584648880624,,32.666666666666664
