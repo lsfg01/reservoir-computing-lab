@@ -886,6 +886,10 @@ class ExternalComparisonRunner:
 
     def _add_task_columns(self, row: dict[str, Any], task_name: str, cfg: dict[str, Any]) -> None:
         rank_metric = self._ranking[task_name]["metric"]
+        task_prefix = "mg" if task_name == "mackey_glass" else task_name
+        metadata = cfg.get("metadata_mean", {})
+        row[f"{task_prefix}_n_total_params"] = metadata.get("n_total_params")
+        row[f"{task_prefix}_n_trainable_params"] = metadata.get("n_trainable_params")
         if task_name == "delay_recall":
             for metric in ("memory_corr_total", "memory_eff_total"):
                 if metric in cfg.get("val_mean", {}):

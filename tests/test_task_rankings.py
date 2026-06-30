@@ -178,12 +178,30 @@ def test_design_task_rankings_include_all_design_tasks():
 
 
 def test_external_task_rankings_include_delay_recall_and_predictive_tasks():
-    rankings = build_task_rankings(_external_payload())
+    payload = _external_payload()
+    expected = {
+        "random_sparse": (100, 10, 10),
+        "tapped_delay": (200, 20, 20),
+        "lstm": (3000, 1000, 1000),
+    }
+    for row in payload["table"]:
+        delay, narma, mg = expected[row["model_name"]]
+        row["delay_recall_n_total_params"] = delay
+        row["delay_recall_n_trainable_params"] = delay
+        row["narma10_n_total_params"] = narma
+        row["narma10_n_trainable_params"] = narma
+        row["mg_n_total_params"] = mg
+        row["mg_n_trainable_params"] = mg
+
+    rankings = build_task_rankings(payload)
 
     assert rankings["comparison_kind"] == "external"
     assert rankings["group_key"] == "model_name"
     assert rankings["enabled_tasks"] == ["delay_recall", "narma10", "mackey_glass"]
     assert rankings["best_by_task"]["delay_recall"]["model_name"] == "tapped_delay"
+    assert rankings["best_by_task"]["delay_recall"]["n_trainable_params"] == 200
+    assert rankings["best_by_task"]["narma10"]["n_trainable_params"] == 1000
+    assert "n_trainable_params_mean" not in rankings["best_by_task"]["narma10"]
 
 
 def test_min_ranking_is_recomputed_when_rank_column_missing():
@@ -290,4 +308,3 @@ def test_load_comparison_summary_records_source_filename(tmp_path: Path):
     rankings = build_task_rankings(payload)
 
     assert rankings["source"] == "comparison_summary.json"
-

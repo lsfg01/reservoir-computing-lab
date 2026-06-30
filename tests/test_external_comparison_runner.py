@@ -176,8 +176,14 @@ def test_external_comparison_smoke_persists_expected_structure(tmp_path):
     assert data["best_by_model"]["random_sparse"]["selected_total_s_mean"] is not None
     assert data["best_by_model"]["random_sparse"]["selected_total_s_std"] is not None
     assert data["best_by_model"]["random_sparse"]["tuning_total_s_sum"] is not None
+    assert data["best_by_model"]["random_sparse"]["delay_recall_n_total_params"] == 66
+    assert data["best_by_model"]["random_sparse"]["delay_recall_n_trainable_params"] == 18
     assert data["best_by_model"]["tapped_delay_ridge"]["selected_total_s_mean"] is not None
     assert data["best_by_model"]["tapped_delay_ridge"]["tuning_total_s_sum"] is not None
+    assert (
+        data["best_by_model"]["tapped_delay_ridge"]["delay_recall_n_trainable_params"]
+        in {6.0, 12.0}
+    )
 
     esn_task_summary = json.loads((out / "random_sparse" / "delay_recall" / "summary.json").read_text(encoding="utf-8"))
     assert esn_task_summary["selected_total_s_mean"] is not None

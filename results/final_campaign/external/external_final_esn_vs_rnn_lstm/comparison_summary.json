@@ -53,7 +53,13 @@
     "global_rank_delay_recall": 9,
     "global_rank_narma10": 1,
     "global_rank_mg": 14,
-    "global_aggregate_rank": 8.0
+    "global_aggregate_rank": 8.0,
+    "delay_recall_n_total_params": 10788.0,
+    "delay_recall_n_trainable_params": 10788.0,
+    "narma10_n_total_params": 4353.0,
+    "narma10_n_trainable_params": 4353.0,
+    "mg_n_total_params": 4353.0,
+    "mg_n_trainable_params": 4353.0
   },
   "best_by_model": {
     "simple_rnn": {
@@ -102,7 +108,13 @@
       "global_rank_delay_recall": 9,
       "global_rank_narma10": 1,
       "global_rank_mg": 14,
-      "global_aggregate_rank": 8.0
+      "global_aggregate_rank": 8.0,
+      "delay_recall_n_total_params": 10788.0,
+      "delay_recall_n_trainable_params": 10788.0,
+      "narma10_n_total_params": 4353.0,
+      "narma10_n_trainable_params": 4353.0,
+      "mg_n_total_params": 4353.0,
+      "mg_n_trainable_params": 4353.0
     },
     "lstm": {
       "model_name": "lstm",
@@ -151,7 +163,13 @@
       "global_rank_delay_recall": 18,
       "global_rank_narma10": 23,
       "global_rank_mg": 3,
-      "global_aggregate_rank": 14.666666666666666
+      "global_aggregate_rank": 14.666666666666666,
+      "delay_recall_n_total_params": 23652.0,
+      "delay_recall_n_trainable_params": 23652.0,
+      "narma10_n_total_params": 17217.0,
+      "narma10_n_trainable_params": 17217.0,
+      "mg_n_total_params": 17217.0,
+      "mg_n_trainable_params": 17217.0
     },
     "cycle_scr": {
       "model_name": "cycle_scr",
@@ -187,7 +205,13 @@
       "global_rank_delay_recall": 1,
       "global_rank_narma10": 21,
       "global_rank_mg": 37,
-      "global_aggregate_rank": 19.666666666666668
+      "global_aggregate_rank": 19.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     "cycle_jump_j7": {
       "model_name": "cycle_jump_j7",
@@ -223,7 +247,13 @@
       "global_rank_delay_recall": 12,
       "global_rank_narma10": 12,
       "global_rank_mg": 35,
-      "global_aggregate_rank": 19.666666666666668
+      "global_aggregate_rank": 19.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     "random_sparse_baseline": {
       "model_name": "random_sparse_baseline",
@@ -259,7 +289,13 @@
       "global_rank_delay_recall": 21,
       "global_rank_narma10": 8,
       "global_rank_mg": 36,
-      "global_aggregate_rank": 21.666666666666668
+      "global_aggregate_rank": 21.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     "tapped_delay_ridge": {
       "model_name": "tapped_delay_ridge",
@@ -295,7 +331,13 @@
       "global_rank_delay_recall": 5,
       "global_rank_narma10": 19,
       "global_rank_mg": 40,
-      "global_aggregate_rank": 21.333333333333332
+      "global_aggregate_rank": 21.333333333333332,
+      "delay_recall_n_total_params": 10200.0,
+      "delay_recall_n_trainable_params": 10200.0,
+      "narma10_n_total_params": 102.0,
+      "narma10_n_trainable_params": 102.0,
+      "mg_n_total_params": 102.0,
+      "mg_n_trainable_params": 102.0
     },
     "multiscale_three_random": {
       "model_name": "multiscale_three_random",
@@ -331,7 +373,13 @@
       "global_rank_delay_recall": 26,
       "global_rank_narma10": 6,
       "global_rank_mg": 33,
-      "global_aggregate_rank": 21.666666666666668
+      "global_aggregate_rank": 21.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     "nonnormal_chain_g0_3": {
       "model_name": "nonnormal_chain_g0_3",
@@ -367,7 +415,13 @@
       "global_rank_delay_recall": 43,
       "global_rank_narma10": 32,
       "global_rank_mg": 21,
-      "global_aggregate_rank": 32.0
+      "global_aggregate_rank": 32.0,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     }
   },
   "table": [
@@ -417,7 +471,13 @@
       "global_rank_delay_recall": 9,
       "global_rank_narma10": 1,
       "global_rank_mg": 14,
-      "global_aggregate_rank": 8.0
+      "global_aggregate_rank": 8.0,
+      "delay_recall_n_total_params": 10788.0,
+      "delay_recall_n_trainable_params": 10788.0,
+      "narma10_n_total_params": 4353.0,
+      "narma10_n_trainable_params": 4353.0,
+      "mg_n_total_params": 4353.0,
+      "mg_n_trainable_params": 4353.0
     },
     {
       "model_name": "simple_rnn",
@@ -463,7 +523,13 @@
       "global_rank_delay_recall": 4,
       "global_rank_narma10": 2,
       "global_rank_mg": 20,
-      "global_aggregate_rank": 8.666666666666666
+      "global_aggregate_rank": 8.666666666666666,
+      "delay_recall_n_total_params": 29668.0,
+      "delay_recall_n_trainable_params": 29668.0,
+      "narma10_n_total_params": 16897.0,
+      "narma10_n_trainable_params": 16897.0,
+      "mg_n_total_params": 16897.0,
+      "mg_n_trainable_params": 16897.0
     },
     {
       "model_name": "simple_rnn",
@@ -511,7 +577,13 @@
       "global_rank_delay_recall": 3,
       "global_rank_narma10": 4,
       "global_rank_mg": 23,
-      "global_aggregate_rank": 10.0
+      "global_aggregate_rank": 10.0,
+      "delay_recall_n_total_params": 29668.0,
+      "delay_recall_n_trainable_params": 29668.0,
+      "narma10_n_total_params": 16897.0,
+      "narma10_n_trainable_params": 16897.0,
+      "mg_n_total_params": 16897.0,
+      "mg_n_trainable_params": 16897.0
     },
     {
       "model_name": "simple_rnn",
@@ -557,7 +629,13 @@
       "global_rank_delay_recall": 13,
       "global_rank_narma10": 3,
       "global_rank_mg": 18,
-      "global_aggregate_rank": 11.333333333333334
+      "global_aggregate_rank": 11.333333333333334,
+      "delay_recall_n_total_params": 10788.0,
+      "delay_recall_n_trainable_params": 10788.0,
+      "narma10_n_total_params": 4353.0,
+      "narma10_n_trainable_params": 4353.0,
+      "mg_n_total_params": 4353.0,
+      "mg_n_trainable_params": 4353.0
     },
     {
       "model_name": "simple_rnn",
@@ -603,7 +681,13 @@
       "global_rank_delay_recall": 8,
       "global_rank_narma10": 5,
       "global_rank_mg": 24,
-      "global_aggregate_rank": 12.333333333333334
+      "global_aggregate_rank": 12.333333333333334,
+      "delay_recall_n_total_params": 10788.0,
+      "delay_recall_n_trainable_params": 10788.0,
+      "narma10_n_total_params": 4353.0,
+      "narma10_n_trainable_params": 4353.0,
+      "mg_n_total_params": 4353.0,
+      "mg_n_trainable_params": 4353.0
     },
     {
       "model_name": "lstm",
@@ -652,7 +736,13 @@
       "global_rank_delay_recall": 11,
       "global_rank_narma10": 27,
       "global_rank_mg": 2,
-      "global_aggregate_rank": 13.333333333333334
+      "global_aggregate_rank": 13.333333333333334,
+      "delay_recall_n_total_params": 23652.0,
+      "delay_recall_n_trainable_params": 23652.0,
+      "narma10_n_total_params": 17217.0,
+      "narma10_n_trainable_params": 17217.0,
+      "mg_n_total_params": 17217.0,
+      "mg_n_trainable_params": 17217.0
     },
     {
       "model_name": "lstm",
@@ -701,7 +791,13 @@
       "global_rank_delay_recall": 18,
       "global_rank_narma10": 23,
       "global_rank_mg": 3,
-      "global_aggregate_rank": 14.666666666666666
+      "global_aggregate_rank": 14.666666666666666,
+      "delay_recall_n_total_params": 23652.0,
+      "delay_recall_n_trainable_params": 23652.0,
+      "narma10_n_total_params": 17217.0,
+      "narma10_n_trainable_params": 17217.0,
+      "mg_n_total_params": 17217.0,
+      "mg_n_trainable_params": 17217.0
     },
     {
       "model_name": "lstm",
@@ -748,7 +844,13 @@
       "global_rank_delay_recall": 25,
       "global_rank_narma10": 24,
       "global_rank_mg": 5,
-      "global_aggregate_rank": 18.0
+      "global_aggregate_rank": 18.0,
+      "delay_recall_n_total_params": 23652.0,
+      "delay_recall_n_trainable_params": 23652.0,
+      "narma10_n_total_params": 17217.0,
+      "narma10_n_trainable_params": 17217.0,
+      "mg_n_total_params": 17217.0,
+      "mg_n_trainable_params": 17217.0
     },
     {
       "model_name": "lstm",
@@ -795,7 +897,13 @@
       "global_rank_delay_recall": 31,
       "global_rank_narma10": 22,
       "global_rank_mg": 4,
-      "global_aggregate_rank": 19.0
+      "global_aggregate_rank": 19.0,
+      "delay_recall_n_total_params": 79972.0,
+      "delay_recall_n_trainable_params": 79972.0,
+      "narma10_n_total_params": 67201.0,
+      "narma10_n_trainable_params": 67201.0,
+      "mg_n_total_params": 67201.0,
+      "mg_n_trainable_params": 67201.0
     },
     {
       "model_name": "cycle_scr",
@@ -831,7 +939,13 @@
       "global_rank_delay_recall": 1,
       "global_rank_narma10": 21,
       "global_rank_mg": 37,
-      "global_aggregate_rank": 19.666666666666668
+      "global_aggregate_rank": 19.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_jump_j7",
@@ -867,7 +981,13 @@
       "global_rank_delay_recall": 12,
       "global_rank_narma10": 12,
       "global_rank_mg": 35,
-      "global_aggregate_rank": 19.666666666666668
+      "global_aggregate_rank": 19.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_scr",
@@ -903,7 +1023,13 @@
       "global_rank_delay_recall": 15,
       "global_rank_narma10": 18,
       "global_rank_mg": 28,
-      "global_aggregate_rank": 20.333333333333332
+      "global_aggregate_rank": 20.333333333333332,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "lstm",
@@ -950,7 +1076,13 @@
       "global_rank_delay_recall": 30,
       "global_rank_narma10": 25,
       "global_rank_mg": 6,
-      "global_aggregate_rank": 20.333333333333332
+      "global_aggregate_rank": 20.333333333333332,
+      "delay_recall_n_total_params": 79972.0,
+      "delay_recall_n_trainable_params": 79972.0,
+      "narma10_n_total_params": 67201.0,
+      "narma10_n_trainable_params": 67201.0,
+      "mg_n_total_params": 67201.0,
+      "mg_n_trainable_params": 67201.0
     },
     {
       "model_name": "cycle_jump_j7",
@@ -986,7 +1118,13 @@
       "global_rank_delay_recall": 17,
       "global_rank_narma10": 13,
       "global_rank_mg": 32,
-      "global_aggregate_rank": 20.666666666666668
+      "global_aggregate_rank": 20.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_jump_j7",
@@ -1022,7 +1160,13 @@
       "global_rank_delay_recall": 23,
       "global_rank_narma10": 14,
       "global_rank_mg": 25,
-      "global_aggregate_rank": 20.666666666666668
+      "global_aggregate_rank": 20.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "lstm",
@@ -1069,7 +1213,13 @@
       "global_rank_delay_recall": 32,
       "global_rank_narma10": 29,
       "global_rank_mg": 1,
-      "global_aggregate_rank": 20.666666666666668
+      "global_aggregate_rank": 20.666666666666668,
+      "delay_recall_n_total_params": 79972.0,
+      "delay_recall_n_trainable_params": 79972.0,
+      "narma10_n_total_params": 67201.0,
+      "narma10_n_trainable_params": 67201.0,
+      "mg_n_total_params": 67201.0,
+      "mg_n_trainable_params": 67201.0
     },
     {
       "model_name": "random_sparse_baseline",
@@ -1105,7 +1255,13 @@
       "global_rank_delay_recall": 24,
       "global_rank_narma10": 10,
       "global_rank_mg": 29,
-      "global_aggregate_rank": 21.0
+      "global_aggregate_rank": 21.0,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "tapped_delay_ridge",
@@ -1141,7 +1297,13 @@
       "global_rank_delay_recall": 5,
       "global_rank_narma10": 19,
       "global_rank_mg": 40,
-      "global_aggregate_rank": 21.333333333333332
+      "global_aggregate_rank": 21.333333333333332,
+      "delay_recall_n_total_params": 10200.0,
+      "delay_recall_n_trainable_params": 10200.0,
+      "narma10_n_total_params": 102.0,
+      "narma10_n_trainable_params": 102.0,
+      "mg_n_total_params": 102.0,
+      "mg_n_trainable_params": 102.0
     },
     {
       "model_name": "random_sparse_baseline",
@@ -1177,7 +1339,13 @@
       "global_rank_delay_recall": 21,
       "global_rank_narma10": 8,
       "global_rank_mg": 36,
-      "global_aggregate_rank": 21.666666666666668
+      "global_aggregate_rank": 21.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "random_sparse_baseline",
@@ -1213,7 +1381,13 @@
       "global_rank_delay_recall": 28,
       "global_rank_narma10": 11,
       "global_rank_mg": 26,
-      "global_aggregate_rank": 21.666666666666668
+      "global_aggregate_rank": 21.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_jump_j7",
@@ -1249,7 +1423,13 @@
       "global_rank_delay_recall": 7,
       "global_rank_narma10": 17,
       "global_rank_mg": 41,
-      "global_aggregate_rank": 21.666666666666668
+      "global_aggregate_rank": 21.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "multiscale_three_random",
@@ -1285,7 +1465,13 @@
       "global_rank_delay_recall": 26,
       "global_rank_narma10": 6,
       "global_rank_mg": 33,
-      "global_aggregate_rank": 21.666666666666668
+      "global_aggregate_rank": 21.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_scr",
@@ -1321,7 +1507,13 @@
       "global_rank_delay_recall": 10,
       "global_rank_narma10": 31,
       "global_rank_mg": 27,
-      "global_aggregate_rank": 22.666666666666668
+      "global_aggregate_rank": 22.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "multiscale_three_random",
@@ -1357,7 +1549,13 @@
       "global_rank_delay_recall": 27,
       "global_rank_narma10": 7,
       "global_rank_mg": 34,
-      "global_aggregate_rank": 22.666666666666668
+      "global_aggregate_rank": 22.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "random_sparse_baseline",
@@ -1393,7 +1591,13 @@
       "global_rank_delay_recall": 16,
       "global_rank_narma10": 15,
       "global_rank_mg": 38,
-      "global_aggregate_rank": 23.0
+      "global_aggregate_rank": 23.0,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "multiscale_three_random",
@@ -1429,7 +1633,13 @@
       "global_rank_delay_recall": 29,
       "global_rank_narma10": 9,
       "global_rank_mg": 31,
-      "global_aggregate_rank": 23.0
+      "global_aggregate_rank": 23.0,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "multiscale_three_random",
@@ -1465,7 +1675,13 @@
       "global_rank_delay_recall": 22,
       "global_rank_narma10": 16,
       "global_rank_mg": 39,
-      "global_aggregate_rank": 25.666666666666668
+      "global_aggregate_rank": 25.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "tapped_delay_ridge",
@@ -1499,7 +1715,13 @@
       "global_rank_delay_recall": 6,
       "global_rank_narma10": 26,
       "global_rank_mg": 45,
-      "global_aggregate_rank": 25.666666666666668
+      "global_aggregate_rank": 25.666666666666668,
+      "delay_recall_n_total_params": 5100.0,
+      "delay_recall_n_trainable_params": 5100.0,
+      "narma10_n_total_params": 51.0,
+      "narma10_n_trainable_params": 51.0,
+      "mg_n_total_params": 51.0,
+      "mg_n_trainable_params": 51.0
     },
     {
       "model_name": "cycle_scr",
@@ -1535,7 +1757,13 @@
       "global_rank_delay_recall": 34,
       "global_rank_narma10": 35,
       "global_rank_mg": 12,
-      "global_aggregate_rank": 27.0
+      "global_aggregate_rank": 27.0,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "tapped_delay_ridge",
@@ -1569,7 +1797,13 @@
       "global_rank_delay_recall": 19,
       "global_rank_narma10": 20,
       "global_rank_mg": 44,
-      "global_aggregate_rank": 27.666666666666668
+      "global_aggregate_rank": 27.666666666666668,
+      "delay_recall_n_total_params": 5200.0,
+      "delay_recall_n_trainable_params": 5200.0,
+      "narma10_n_total_params": 52.0,
+      "narma10_n_trainable_params": 52.0,
+      "mg_n_total_params": 52.0,
+      "mg_n_trainable_params": 52.0
     },
     {
       "model_name": "simple_rnn",
@@ -1615,7 +1849,13 @@
       "global_rank_delay_recall": 14,
       "global_rank_narma10": 28,
       "global_rank_mg": 42,
-      "global_aggregate_rank": 28.0
+      "global_aggregate_rank": 28.0,
+      "delay_recall_n_total_params": 29668.0,
+      "delay_recall_n_trainable_params": 29668.0,
+      "narma10_n_total_params": 16897.0,
+      "narma10_n_trainable_params": 16897.0,
+      "mg_n_total_params": 16897.0,
+      "mg_n_trainable_params": 16897.0
     },
     {
       "model_name": "random_sparse_baseline",
@@ -1651,7 +1891,13 @@
       "global_rank_delay_recall": 36,
       "global_rank_narma10": 39,
       "global_rank_mg": 10,
-      "global_aggregate_rank": 28.333333333333332
+      "global_aggregate_rank": 28.333333333333332,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "random_sparse_baseline",
@@ -1687,7 +1933,13 @@
       "global_rank_delay_recall": 37,
       "global_rank_narma10": 43,
       "global_rank_mg": 8,
-      "global_aggregate_rank": 29.333333333333332
+      "global_aggregate_rank": 29.333333333333332,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "nonnormal_chain_g0_3",
@@ -1723,7 +1975,13 @@
       "global_rank_delay_recall": 44,
       "global_rank_narma10": 37,
       "global_rank_mg": 7,
-      "global_aggregate_rank": 29.333333333333332
+      "global_aggregate_rank": 29.333333333333332,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "multiscale_three_random",
@@ -1759,7 +2017,13 @@
       "global_rank_delay_recall": 38,
       "global_rank_narma10": 36,
       "global_rank_mg": 17,
-      "global_aggregate_rank": 30.333333333333332
+      "global_aggregate_rank": 30.333333333333332,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_scr",
@@ -1795,7 +2059,13 @@
       "global_rank_delay_recall": 2,
       "global_rank_narma10": 47,
       "global_rank_mg": 43,
-      "global_aggregate_rank": 30.666666666666668
+      "global_aggregate_rank": 30.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "multiscale_three_random",
@@ -1831,7 +2101,13 @@
       "global_rank_delay_recall": 39,
       "global_rank_narma10": 40,
       "global_rank_mg": 16,
-      "global_aggregate_rank": 31.666666666666668
+      "global_aggregate_rank": 31.666666666666668,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "nonnormal_chain_g0_3",
@@ -1867,7 +2143,13 @@
       "global_rank_delay_recall": 43,
       "global_rank_narma10": 32,
       "global_rank_mg": 21,
-      "global_aggregate_rank": 32.0
+      "global_aggregate_rank": 32.0,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "tapped_delay_ridge",
@@ -1901,7 +2183,13 @@
       "global_rank_delay_recall": 20,
       "global_rank_narma10": 30,
       "global_rank_mg": 46,
-      "global_aggregate_rank": 32.0
+      "global_aggregate_rank": 32.0,
+      "delay_recall_n_total_params": 2600.0,
+      "delay_recall_n_trainable_params": 2600.0,
+      "narma10_n_total_params": 26.0,
+      "narma10_n_trainable_params": 26.0,
+      "mg_n_total_params": 26.0,
+      "mg_n_trainable_params": 26.0
     },
     {
       "model_name": "cycle_jump_j7",
@@ -1937,7 +2225,13 @@
       "global_rank_delay_recall": 42,
       "global_rank_narma10": 46,
       "global_rank_mg": 9,
-      "global_aggregate_rank": 32.333333333333336
+      "global_aggregate_rank": 32.333333333333336,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "nonnormal_chain_g0_3",
@@ -1973,7 +2267,13 @@
       "global_rank_delay_recall": 45,
       "global_rank_narma10": 33,
       "global_rank_mg": 19,
-      "global_aggregate_rank": 32.333333333333336
+      "global_aggregate_rank": 32.333333333333336,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_jump_j7",
@@ -2009,7 +2309,13 @@
       "global_rank_delay_recall": 40,
       "global_rank_narma10": 45,
       "global_rank_mg": 13,
-      "global_aggregate_rank": 32.666666666666664
+      "global_aggregate_rank": 32.666666666666664,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "cycle_scr",
@@ -2045,7 +2351,13 @@
       "global_rank_delay_recall": 41,
       "global_rank_narma10": 48,
       "global_rank_mg": 11,
-      "global_aggregate_rank": 33.333333333333336
+      "global_aggregate_rank": 33.333333333333336,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "nonnormal_chain_g0_3",
@@ -2081,7 +2393,13 @@
       "global_rank_delay_recall": 46,
       "global_rank_narma10": 38,
       "global_rank_mg": 22,
-      "global_aggregate_rank": 35.333333333333336
+      "global_aggregate_rank": 35.333333333333336,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "nonnormal_chain_g0_3",
@@ -2117,7 +2435,13 @@
       "global_rank_delay_recall": 48,
       "global_rank_narma10": 44,
       "global_rank_mg": 15,
-      "global_aggregate_rank": 35.666666666666664
+      "global_aggregate_rank": 35.666666666666664,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "nonnormal_chain_g0_3",
@@ -2153,7 +2477,13 @@
       "global_rank_delay_recall": 47,
       "global_rank_narma10": 34,
       "global_rank_mg": 30,
-      "global_aggregate_rank": 37.0
+      "global_aggregate_rank": 37.0,
+      "delay_recall_n_total_params": 20200.0,
+      "delay_recall_n_trainable_params": 10000.0,
+      "narma10_n_total_params": 10300.0,
+      "narma10_n_trainable_params": 100.0,
+      "mg_n_total_params": 10300.0,
+      "mg_n_trainable_params": 100.0
     },
     {
       "model_name": "tapped_delay_ridge",
@@ -2187,7 +2517,13 @@
       "global_rank_delay_recall": 33,
       "global_rank_narma10": 41,
       "global_rank_mg": 47,
-      "global_aggregate_rank": 40.333333333333336
+      "global_aggregate_rank": 40.333333333333336,
+      "delay_recall_n_total_params": 2200.0,
+      "delay_recall_n_trainable_params": 2200.0,
+      "narma10_n_total_params": 22.0,
+      "narma10_n_trainable_params": 22.0,
+      "mg_n_total_params": 22.0,
+      "mg_n_trainable_params": 22.0
     },
     {
       "model_name": "tapped_delay_ridge",
@@ -2221,7 +2557,13 @@
       "global_rank_delay_recall": 35,
       "global_rank_narma10": 42,
       "global_rank_mg": 48,
-      "global_aggregate_rank": 41.666666666666664
+      "global_aggregate_rank": 41.666666666666664,
+      "delay_recall_n_total_params": 1100.0,
+      "delay_recall_n_trainable_params": 1100.0,
+      "narma10_n_total_params": 11.0,
+      "narma10_n_trainable_params": 11.0,
+      "mg_n_total_params": 11.0,
+      "mg_n_trainable_params": 11.0
     }
   ]
 }

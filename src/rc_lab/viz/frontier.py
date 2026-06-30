@@ -18,20 +18,52 @@ import numpy as np
 from rc_lab.viz.io import frontier_per_sin, frontier_per_x, load_point_curves, load_summary, pivot_plane
 from rc_lab.viz.primitives import (
     add_colorbar,
+    categorical_index,
     categorical_vline,
     heatmap_plane,
     overlay_frontier_per_y,
-    overlay_regions,
     surface_plane,  # kept in public API; not used by F7 after rewrite
 )
 from rc_lab.viz.style import CMAPS, PALETTE, apply_style, save_figure
 
-# Default candidate regions (refined post-campaign)
+# Theoretical regions are conceptual dense subsets of parameter space. The
+# experimental A/B1/B2/C grids below are their finite sweep discretization.
+_THEORETICAL_REGIONS: dict[str, dict[str, Any]] = {
+    "R1": {
+        "rho": (0.60, 0.90),
+        "input_scaling": (0.05, 0.20),
+        "leak_rate": (0.90, 1.00),
+        "label": "R1",
+    },
+    "R2": {
+        "rho": (0.90, 1.05),
+        "input_scaling": (0.05, 0.20),
+        "leak_rate": (0.90, 1.00),
+        "label": "R2",
+    },
+    "R3": {
+        "rho": (1.00, 1.50),
+        "input_scaling": (0.40, 1.50),
+        "leak_rate": (0.90, 1.00),
+        "label": "R3",
+    },
+    "R4": {
+        "rho": (0.80, 1.40),
+        "input_scaling": (0.40, 1.50),
+        "leak_rate": (0.30, 0.50),
+        "label": "R4",
+    },
+}
+
+# Backward-compatible 2-D representation accepted by F2/F3 and --regions.
 CANDIDATE_REGIONS: list[dict[str, Any]] = [
-    {"name": "R1", "x": (0.60, 0.90), "y": (0.05, 0.20)},
-    {"name": "R2", "x": (0.90, 1.00), "y": (0.05, 0.20)},
-    {"name": "R3", "x": (1.00, 1.40), "y": (0.40, 1.50)},
-    {"name": "R4", "x": (0.80, 1.10), "y": (0.05, 0.40)},
+    {
+        "name": name,
+        "x": spec["rho"],
+        "y": spec["input_scaling"],
+        "alpha": spec["leak_rate"],
+    }
+    for name, spec in _THEORETICAL_REGIONS.items()
 ]
 
 _SYNC_THRESH = 0.999
@@ -81,9 +113,228 @@ def _nfd_float(row: Any) -> float:
         return float("nan")
 
 
-def _alpha_title(alpha: float) -> str:
-    """Produce e.g. '($\\alpha{=}1.0$)' for figure titles."""
-    return rf"($\alpha{{=}}{alpha}$)"
+def build_theoretical_regions() -> dict[str, dict[str, Any]]:
+    """Return independent 3-D definitions of the conceptual R1-R4 regions."""
+    return {
+        name: {
+            "rho": tuple(spec["rho"]),
+            "input_scaling": tuple(spec["input_scaling"]),
+            "leak_rate": tuple(spec["leak_rate"]),
+            "label": str(spec["label"]),
+        }
+        for name, spec in _THEORETICAL_REGIONS.items()
+    }
+
+
+def _grid_points(
+    spectral_radius: list[float],
+    input_scaling: list[float],
+    leak_rate: list[float],
+) -> list[dict[str, float]]:
+    return [
+        {
+            "spectral_radius": float(rho),
+            "input_scaling": float(s_in),
+            "leak_rate": float(alpha),
+        }
+        for rho in spectral_radius
+        for s_in in input_scaling
+        for alpha in leak_rate
+    ]
+
+
+def build_experimental_grids() -> dict[str, list[dict[str, float]]]:
+    """Return the 88 A/B1/B2/C config points used by the later sweep."""
+    return {
+        "A": _grid_points(
+            [0.8, 0.9, 0.95, 1.0, 1.05],
+            [0.05, 0.1, 0.2],
+            [0.9, 1.0],
+        ),
+        "B1": _grid_points(
+            [1.0, 1.2, 1.4],
+            [0.4, 0.8, 1.0],
+            [0.9, 1.0],
+        ),
+        "B2": _grid_points(
+            [1.0, 1.2, 1.4, 1.5],
+            [1.5],
+            [0.9, 1.0],
+        ),
+        "C": _grid_points(
+            [0.8, 1.0, 1.2, 1.4],
+            [0.4, 0.8, 1.0, 1.5],
+            [0.3, 0.5],
+        ),
+    }
+
+
+def temporal_extension_rhos(
+    group: Any,
+    rho_star: float,
+    descending_threshold: float = _TRUNC_THRESH,
+) -> list[float]:
+    """Return the consecutive exterior p_next values with censor evidence."""
+    above = group[
+        group["rho_target"].astype(float) > float(rho_star)
+    ].sort_values("rho_target")
+    extension: list[float] = []
+    for _, row in above.iterrows():
+        nfd = _nfd_float(row)
+        if not np.isfinite(nfd) or nfd < descending_threshold:
+            break
+        extension.append(float(row["rho_target"]))
+    return extension
+
+
+def detect_temporal_truncation(
+    group: Any,
+    rho_star: float,
+    descending_threshold: float = _TRUNC_THRESH,
+) -> tuple[bool, float | None]:
+    """Return whether a temporal tail exists and its final p_next."""
+    extension = temporal_extension_rhos(group, rho_star, descending_threshold)
+    return bool(extension), extension[-1] if extension else None
+
+
+def detect_spatial_truncation(rho_star: float, rho_max: float) -> bool:
+    """Return whether the observed frontier reaches the rho grid boundary."""
+    return bool(np.isclose(float(rho_star), float(rho_max), atol=1e-8))
+
+
+def extract_frontier_curves(
+    summary_df: Any,
+    threshold: float = _SYNC_THRESH,
+    family: str | None = None,
+) -> dict[float, list[dict[str, Any]]]:
+    """Extract observed rho*(s_in, alpha) points and both censoring flags."""
+    df = summary_df
+    if family is not None:
+        df = df[df["family_name"] == family]
+    if len(df) == 0:
+        return {}
+
+    rho_max = float(df["rho_target"].astype(float).max())
+    curves: dict[float, list[dict[str, Any]]] = {}
+    for alpha in sorted(df["alpha"].astype(float).unique()):
+        sub_alpha = _isclose_filter(df, "alpha", alpha)
+        points: list[dict[str, Any]] = []
+        for s_in in sorted(sub_alpha["s_in"].astype(float).unique()):
+            group = _isclose_filter(sub_alpha, "s_in", s_in)
+            valid = group[
+                group["fraction_synchronized_mean"].astype(float) >= threshold
+            ]
+            if len(valid) == 0:
+                continue
+            rho_star = float(valid["rho_target"].astype(float).max())
+            temporal_extension = temporal_extension_rhos(group, rho_star)
+            temporal = bool(temporal_extension)
+            temporal_rho = temporal_extension[-1] if temporal_extension else None
+            points.append({
+                "alpha": float(alpha),
+                "input_scaling": float(s_in),
+                "rho_star": rho_star,
+                "spatially_truncated": detect_spatial_truncation(rho_star, rho_max),
+                "temporally_truncated_next": temporal,
+                "temporal_candidate_rho": temporal_rho,
+                "temporal_extension_rhos": temporal_extension,
+            })
+        if points:
+            curves[float(alpha)] = points
+    return curves
+
+
+def build_frontier_surface(
+    frontier_curves: dict[float, list[dict[str, Any]]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build a visual interpolation mesh from observed frontier curves."""
+    if not frontier_curves:
+        empty = np.empty((0, 0), dtype=float)
+        return empty, empty.copy(), empty.copy()
+
+    alphas = sorted(frontier_curves)
+    sin_values = sorted({
+        float(point["input_scaling"])
+        for points in frontier_curves.values()
+        for point in points
+    })
+    X = np.full((len(alphas), len(sin_values)), np.nan)
+    Y = np.tile(np.asarray(sin_values, dtype=float), (len(alphas), 1))
+    Z = np.tile(np.asarray(alphas, dtype=float)[:, None], (1, len(sin_values)))
+
+    for alpha_idx, alpha in enumerate(alphas):
+        by_sin = {
+            float(point["input_scaling"]): float(point["rho_star"])
+            for point in frontier_curves[alpha]
+        }
+        for sin_idx, s_in in enumerate(sin_values):
+            if s_in in by_sin:
+                X[alpha_idx, sin_idx] = by_sin[s_in]
+    return X, Y, Z
+
+
+def _region_3d_spec(region: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy 2-D region dictionaries into a 3-D definition."""
+    name = str(region["name"])
+    default = _THEORETICAL_REGIONS.get(name, {})
+    return {
+        "name": name,
+        "rho": tuple(region.get("rho", region.get("x", default.get("rho", (0.0, 0.0))))),
+        "input_scaling": tuple(
+            region.get("input_scaling", region.get("y", default.get("input_scaling", (0.0, 0.0))))
+        ),
+        "leak_rate": tuple(
+            region.get("leak_rate", region.get("alpha", default.get("leak_rate", (1.0, 1.0))))
+        ),
+    }
+
+
+def _overlay_theoretical_regions_2d(
+    ax: Any,
+    regions: list[dict[str, Any]],
+    x_ticks: list[float],
+    y_ticks: list[float],
+) -> None:
+    """Overlay R1-R3 as slice regions and R4 as a low-leak projection."""
+    from matplotlib.patches import Rectangle
+
+    colors = {"R1": "#1f77b4", "R2": "#2ca02c", "R3": "#ff7f0e", "R4": "#9467bd"}
+    for region in regions:
+        spec = _region_3d_spec(region)
+        name = spec["name"]
+        x_lo, x_hi = spec["rho"]
+        y_lo, y_hi = spec["input_scaling"]
+        x0 = categorical_index(x_ticks, x_lo) - 0.5
+        x1 = categorical_index(x_ticks, x_hi) + 0.5
+        y0 = categorical_index(y_ticks, y_lo) - 0.5
+        y1 = categorical_index(y_ticks, y_hi) + 0.5
+        is_projection = name == "R4"
+        color = colors.get(name, "#555555")
+        alpha = 0.42 if is_projection else 0.82
+        rect = Rectangle(
+            (x0, y0),
+            x1 - x0,
+            y1 - y0,
+            linewidth=1.5,
+            edgecolor=color,
+            facecolor="none",
+            linestyle="--" if is_projection else "-",
+            alpha=alpha,
+            zorder=4,
+        )
+        ax.add_patch(rect)
+        label = "R4 proj." if is_projection else name
+        ax.text(
+            x0 + 0.02 * (x1 - x0),
+            y1 - 0.04 * (y1 - y0),
+            label,
+            fontsize=7,
+            color=color,
+            alpha=0.7 if is_projection else 1.0,
+            va="top",
+            ha="left",
+            zorder=6,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +420,37 @@ def _draw_rect_3d(
         ax.text(x0, y1, z, label, fontsize=7, color=color, zorder=10)
 
 
+def _draw_experimental_grid_mesh(
+    ax: Any,
+    points: list[dict[str, Any]],
+    color: str,
+    grid_name: str,
+) -> None:
+    """Connect adjacent points within one Cartesian experimental grid."""
+    coordinates = ("spectral_radius", "input_scaling", "leak_rate")
+    for varying in coordinates:
+        fixed = tuple(name for name in coordinates if name != varying)
+        grouped: dict[tuple[float, float], list[dict[str, float]]] = {}
+        for point in points:
+            key = (float(point[fixed[0]]), float(point[fixed[1]]))
+            grouped.setdefault(key, []).append(point)
+
+        for line_points in grouped.values():
+            ordered = sorted(line_points, key=lambda point: float(point[varying]))
+            if len(ordered) < 2:
+                continue
+            line = ax.plot(
+                [point["spectral_radius"] for point in ordered],
+                [point["input_scaling"] for point in ordered],
+                [point["leak_rate"] for point in ordered],
+                color=color,
+                lw=0.5,
+                alpha=0.20,
+                zorder=4,
+            )[0]
+            line.set_gid(f"experimental-grid-mesh-{grid_name}")
+
+
 # ---------------------------------------------------------------------------
 # F1 — frac_sync heatmap (ρ, s_in) @ α_primary + frontier
 # ---------------------------------------------------------------------------
@@ -190,7 +472,6 @@ def _f1_frac_sync(
     categorical_vline(ax, xs, 1.0, color="k", lw=0.8, ls=":", zorder=6)
     ax.set_xlabel(_LAB_RHO)
     ax.set_ylabel(_LAB_SIN)
-    ax.set_title(rf"F1 — Fracción sincronizada {_alpha_title(alpha_primary)}")
     ax.legend(fontsize=7, loc="upper right")
     fig.tight_layout()
     return save_figure(fig, out_dir, "F1_frac_sync")
@@ -218,12 +499,11 @@ def _f2_washout_heatmap(
     fig, ax = plt.subplots(figsize=(7, 4))
     pcm = heatmap_plane(ax, log_g, xs, ys, CMAPS["sequential_warm"], vmin, vmax, mask=smask)
     overlay_frontier_per_y(ax, xs, ys, fp)
-    overlay_regions(ax, regions, xs, ys)
+    _overlay_theoretical_regions_2d(ax, regions, xs, ys)
     add_colorbar(fig, ax, pcm, _LAB_LOGW)
     categorical_vline(ax, xs, 1.0, color="k", lw=0.8, ls=":", zorder=6)
     ax.set_xlabel(_LAB_RHO)
     ax.set_ylabel(_LAB_SIN)
-    ax.set_title(rf"F2 — Washout empírico $(\log_{{10}})$ {_alpha_title(alpha_primary)}")
     ax.legend(fontsize=7, loc="upper right")
     fig.tight_layout()
     return save_figure(fig, out_dir, "F2_washout_heatmap")
@@ -251,12 +531,11 @@ def _f3_sat_heatmap(
     fig, ax = plt.subplots(figsize=(7, 4))
     pcm = heatmap_plane(ax, grid, xs, ys, CMAPS["sequential_warm"], 0.0, vmax)
     overlay_frontier_per_y(ax, xs, ys, fp)
-    overlay_regions(ax, regions, xs, ys)
+    _overlay_theoretical_regions_2d(ax, regions, xs, ys)
     add_colorbar(fig, ax, pcm, _LAB_AMP)
     categorical_vline(ax, xs, 1.0, color="k", lw=0.8, ls=":", zorder=6)
     ax.set_xlabel(_LAB_RHO)
     ax.set_ylabel(_LAB_SIN)
-    ax.set_title(rf"F3 — Amplitud media $\langle|x|\rangle$ {_alpha_title(alpha_primary)}")
     ax.legend(fontsize=7, loc="upper right")
     fig.tight_layout()
     return save_figure(fig, out_dir, "F3_sat_heatmap")
@@ -301,7 +580,6 @@ def _f4_rho_star_curves(df: Any, out_dir: Path, family: str) -> list[Path]:
     ax.axhline(1.0, color="k", lw=0.8, ls=":", label=r"$\rho=1$", zorder=3)
     ax.set_xlabel(_LAB_SIN)
     ax.set_ylabel(r"$\rho^{*}$ (máx $\rho$ sincronizado)")
-    ax.set_title(r"F4 — Frontera $\rho^{*}(s_{\mathrm{in}})$ por $\alpha$  [$\blacktriangle$ = truncado]")
     ax.legend(fontsize=7)
     fig.tight_layout()
     return save_figure(fig, out_dir, "F4_rho_star_curves")
@@ -375,10 +653,6 @@ def _f5_washout_lines(
     ax_top.set_yscale("log")
     ax_top.axvline(1.0, color="k", lw=0.8, ls=":", zorder=3)
     ax_top.set_ylabel(_LAB_WASHOUT)
-    ax_top.set_title(
-        rf"F5 — Washout$(\rho)$ por $s_{{\mathrm{{in}}}}$ {_alpha_title(alpha_primary)}"
-        "\n" r"(— sync.; -- censurado)"
-    )
     ax_top.legend(fontsize=7, loc="upper left")
 
     ax_bot.axvline(1.0, color="k", lw=0.8, ls=":", zorder=3)
@@ -407,10 +681,6 @@ def _f6_leak_cuts(df: Any, out_dir: Path, family: str) -> list[Path]:
     ]
 
     fig, axes = plt.subplots(2, 2, figsize=(11, 7))
-    fig.suptitle(
-        r"F6 — Cortes de leak: washout y amplitud $\langle|x|\rangle$ por $(\rho, \alpha)$",
-        fontsize=10,
-    )
 
     for row_idx, sin_val in enumerate(sin_cuts):
         fixed: dict[str, Any] = {"family_name": family, "s_in": sin_val}
@@ -445,7 +715,7 @@ def _f6_leak_cuts(df: Any, out_dir: Path, family: str) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# F7 — parameter space (ρ, s_in, α): R1–R4 boxes + ρ* scatter
+# F7 - parameter space: R1-R4 regions and experimental points
 # ---------------------------------------------------------------------------
 
 def _f7_surface_3d(
@@ -453,6 +723,8 @@ def _f7_surface_3d(
     regions: list[dict[str, Any]] = CANDIDATE_REGIONS,
 ) -> list[Path]:
     import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
     from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
     sub = df[df["family_name"] == family]
@@ -460,112 +732,221 @@ def _f7_surface_3d(
     alpha_vals = sorted(sub["alpha"].astype(float).unique())
     rho_vals = sorted(sub["rho_target"].astype(float).unique())
     alpha_min, alpha_max = min(alpha_vals), max(alpha_vals)
+    rho_max_curves = extract_frontier_curves(sub, family=family)
+    surface_x, surface_y, surface_z = build_frontier_surface(rho_max_curves)
 
-    # Curves are computed below after the regions are drawn.
-    fig = plt.figure(figsize=(8, 6))
+    fig = plt.figure(figsize=(12, 7))
     ax = fig.add_subplot(111, projection="3d")
 
-    # Draw R1-R4 with their real alpha extent.
-    region_colors = ["#1f77b4", "#2ca02c", "#ff7f0e", "#9467bd"]
-    for idx, r in enumerate(regions):
-        color = region_colors[idx % len(region_colors)]
-        if r["name"] == "R4":
-            _draw_box_3d(
-                ax,
-                x_range=r["x"],
-                y_range=r["y"],
-                z_range=(0.3, 0.5),
-                color=color,
-                alpha_face=0.12,
-                label=r["name"],
+    # Layer 1: conceptual dense regions.
+    region_colors = {
+        "R1": "#1f77b4",
+        "R2": "#2ca02c",
+        "R3": "#ff7f0e",
+        "R4": "#9467bd",
+    }
+    for r in regions:
+        spec = _region_3d_spec(r)
+        color = region_colors.get(str(spec["name"]), "#555555")
+        _draw_box_3d(
+            ax,
+            x_range=spec["rho"],
+            y_range=spec["input_scaling"],
+            z_range=spec["leak_rate"],
+            color=color,
+            alpha_face=0.055,
+            label=spec["name"],
+        )
+
+    # Layer 2: the finite grids used by the later performance sweep.
+    grid_styles = {
+        "A": ("o", "#1f77b4", "A (rejilla, R1/R2)"),
+        "B1": ("s", "#ff7f0e", "B1 (rejilla, R3)"),
+        "B2": ("^", "#d62728", "B2 (rejilla, R3 extremo)"),
+        "C": ("D", "#9467bd", "C (rejilla, R4)"),
+    }
+    grids = build_experimental_grids()
+    for grid_name, points in grids.items():
+        marker, color, _ = grid_styles[grid_name]
+        _draw_experimental_grid_mesh(ax, points, color, grid_name)
+        ax.scatter(
+            [p["spectral_radius"] for p in points],
+            [p["input_scaling"] for p in points],
+            [p["leak_rate"] for p in points],
+            marker=marker,
+            s=16,
+            c=color,
+            edgecolors="white",
+            linewidths=0.35,
+            alpha=0.78,
+            depthshade=False,
+            zorder=5,
+        )
+
+    # Layer 3: colored approximation of the rho_max manifold and its mesh.
+    if surface_x.size and surface_x.shape[0] >= 2 and surface_x.shape[1] >= 2:
+        manifold = ax.plot_surface(
+            surface_x,
+            surface_y,
+            surface_z,
+            color="#76b7e5",
+            alpha=0.14,
+            edgecolor="none",
+            shade=False,
+            antialiased=True,
+            zorder=3,
+        )
+        manifold.set_gid("rho-max-manifold")
+        manifold_mesh = ax.plot_wireframe(
+            surface_x,
+            surface_y,
+            surface_z,
+            rstride=1,
+            cstride=1,
+            color="#164a73",
+            linewidth=0.65,
+            alpha=0.30,
+            zorder=4,
+        )
+        manifold_mesh.set_gid("rho-max-manifold-mesh")
+
+    # Layer 4: observed rho_max curves, dashed only for temporal truncation.
+    rho_colors = plt.get_cmap("Blues")(
+        np.linspace(0.52, 0.92, max(1, len(rho_max_curves)))
+    )
+    rho_handles: list[Any] = []
+    for idx, (alpha_val, points) in enumerate(sorted(rho_max_curves.items())):
+        color = rho_colors[idx]
+        ordered = sorted(points, key=lambda point: float(point["input_scaling"]))
+        for left, right in zip(ordered, ordered[1:]):
+            temporal_segment = bool(
+                left["temporally_truncated_next"]
+                or right["temporally_truncated_next"]
             )
-        else:
-            _draw_rect_3d(
-                ax,
-                x_range=r["x"],
-                y_range=r["y"],
-                z=1.0,
+            segment = ax.plot(
+                [float(left["rho_star"]), float(right["rho_star"])],
+                [float(left["input_scaling"]), float(right["input_scaling"])],
+                [float(alpha_val), float(alpha_val)],
                 color=color,
-                alpha_face=0.12,
-                label=r["name"],
+                lw=2.0,
+                ls="--" if temporal_segment else "-",
+                alpha=0.72 if temporal_segment else 0.95,
+                zorder=8,
+            )[0]
+            segment.set_gid(
+                "rho-max-segment-temporal"
+                if temporal_segment
+                else "rho-max-segment-observed"
             )
 
-    trunc_legend_added = False
-    for idx, alpha_val in enumerate(alpha_vals):
-        fixed = _fixed_alpha(family, alpha_val)
-        fp = frontier_per_sin(df, "rho_target", "s_in", "fraction_synchronized_mean",
-                              _SYNC_THRESH, fixed)
-        if not fp:
-            continue
-
-        curve_s = sorted(fp)
-        curve_rho = [fp[s_in_val] for s_in_val in curve_s]
-        curve_trunc: list[bool] = []
-        sub_a = _isclose_filter(sub, "alpha", alpha_val)
-
-        for s_in_val, rho_star_val in zip(curve_s, curve_rho):
-            sub_s = sub_a[np.isclose(sub_a["s_in"].astype(float).to_numpy(), s_in_val)]
-            valid = sub_s[sub_s["fraction_synchronized_mean"].astype(float) >= _SYNC_THRESH]
-            above = sub_s[
-                sub_s["rho_target"].astype(float) > rho_star_val
-            ].sort_values("rho_target")
-            is_trunc = len(valid) == 0
-            if len(above) > 0:
-                nfd_f = _nfd_float(above.iloc[0])
-                if np.isfinite(nfd_f) and nfd_f >= _TRUNC_THRESH:
-                    is_trunc = True
-            curve_trunc.append(is_trunc)
-
-        color = PALETTE[idx % len(PALETTE)]
-        ax.plot([], [], [], color=color, lw=1.8, label=rf"$\alpha={alpha_val:g}$")
-        for seg_idx in range(len(curve_s) - 1):
-            seg_trunc = curve_trunc[seg_idx] or curve_trunc[seg_idx + 1]
-            ax.plot(
-                [curve_rho[seg_idx], curve_rho[seg_idx + 1]],
-                [curve_s[seg_idx], curve_s[seg_idx + 1]],
-                [alpha_val, alpha_val],
-                color=color,
-                lw=1.8,
-                ls="--" if seg_trunc else "-",
-                alpha=0.7 if seg_trunc else 1.0,
-                zorder=6,
+        normal = [
+            point for point in ordered
+            if not (
+                point["temporally_truncated_next"]
+                or point["spatially_truncated"]
             )
-
-        normal_pts = [
-            (rho, s_in_val, alpha_val)
-            for rho, s_in_val, is_trunc in zip(curve_rho, curve_s, curve_trunc)
-            if not is_trunc
         ]
-        trunc_pts = [
-            (rho, s_in_val, alpha_val)
-            for rho, s_in_val, is_trunc in zip(curve_rho, curve_s, curve_trunc)
-            if is_trunc
+        temporal = [
+            point for point in ordered
+            if point["temporally_truncated_next"]
+            and not point["spatially_truncated"]
         ]
-        if normal_pts:
-            xs, ys, zs = zip(*normal_pts)
-            ax.scatter(xs, ys, zs, s=24, c=color, marker="o", depthshade=True,
-                       zorder=7)
-        if trunc_pts:
-            xs, ys, zs = zip(*trunc_pts)
-            ax.scatter(
-                xs, ys, zs, s=34, c="none", edgecolors=color,
-                linewidths=1.2, marker="o",
-                label="truncado" if not trunc_legend_added else None,
-                depthshade=False, zorder=8,
-            )
-            trunc_legend_added = True
+        spatial = [point for point in ordered if point["spatially_truncated"]]
+        if normal:
+            normal_points = ax.plot(
+                [float(point["rho_star"]) for point in normal],
+                [float(point["input_scaling"]) for point in normal],
+                [float(alpha_val)] * len(normal),
+                ls="none",
+                marker="o",
+                ms=4.2,
+                color=color,
+                markeredgecolor="white",
+                markeredgewidth=0.45,
+                zorder=9,
+            )[0]
+            normal_points.set_gid("rho-max-point-observed")
+        if temporal:
+            temporal_points = ax.plot(
+                [float(point["rho_star"]) for point in temporal],
+                [float(point["input_scaling"]) for point in temporal],
+                [float(alpha_val)] * len(temporal),
+                ls="none",
+                marker="o",
+                ms=5.0,
+                color=color,
+                markerfacecolor="none",
+                markeredgewidth=1.1,
+                zorder=9,
+            )[0]
+            temporal_points.set_gid("rho-max-point-temporal")
+        if spatial:
+            spatial_points = ax.plot(
+                [float(point["rho_star"]) for point in spatial],
+                [float(point["input_scaling"]) for point in spatial],
+                [float(alpha_val)] * len(spatial),
+                ls="none",
+                marker=">",
+                ms=6.0,
+                color=color,
+                markeredgecolor="black",
+                markeredgewidth=0.45,
+                zorder=10,
+            )[0]
+            spatial_points.set_gid("rho-max-point-spatial")
+
+        rho_handles.append(Line2D(
+            [0], [0], color=color, lw=2.0, marker="o", ms=4,
+            label=rf"$\alpha={alpha_val:g}$",
+        ))
 
     ax.set_xlabel(r"$\rho$")
     ax.set_ylabel(r"$s_{\mathrm{in}}$")
     ax.set_zlabel(r"$\alpha$")
     ax.set_xlim(min(rho_vals), max(rho_vals))
     ax.set_ylim(min(sin_vals), max(sin_vals))
-    ax.set_zlim(min(0.3, alpha_min), max(1.0, alpha_max))
-    ax.view_init(elev=22, azim=-60)
-    ax.set_title(
-        r"F7 — Regiones y frontera $\rho^{*}$ en $(\rho, s_{\mathrm{in}}, \alpha)$"
+    ax.set_zlim(min(0.1, alpha_min), max(1.0, alpha_max))
+    ax.view_init(elev=24, azim=-62)
+
+    rho_legend = ax.legend(
+        handles=rho_handles,
+        title=r"Curvas por $\alpha$",
+        fontsize=7,
+        title_fontsize=7,
+        loc="upper left",
+        bbox_to_anchor=(0.0, 0.98),
     )
-    ax.legend(fontsize=7, loc="upper left")
+    ax.add_artist(rho_legend)
+
+    grid_handles: list[Any] = []
+    grid_handles.extend([
+        Line2D([0], [0], color="#2171b5", lw=2.0, ls="-",
+               label=r"$\rho_{\max}$ observado"),
+        Line2D([0], [0], color="#2171b5", lw=2.0, ls="--",
+               marker="o", markerfacecolor="none",
+               label="truncamiento temporal"),
+        Line2D([0], [0], color="#2171b5", lw=0, marker=">",
+               markeredgecolor="black",
+               label="truncamiento espacial"),
+        Patch(facecolor="#76b7e5", edgecolor="#164a73", alpha=0.22,
+              label=r"variedad aproximada de $\rho_{\max}$"),
+    ])
+    for grid_name in ("A", "B1", "B2", "C"):
+        marker, color, label = grid_styles[grid_name]
+        grid_handles.append(Line2D(
+            [0], [0], marker=marker, color="none", markerfacecolor=color,
+            markeredgecolor="white", markeredgewidth=0.4, markersize=5,
+            label=label,
+        ))
+    ax.legend(
+        handles=grid_handles,
+        title="Capas",
+        fontsize=7,
+        title_fontsize=7,
+        loc="center left",
+        bbox_to_anchor=(1.00, 0.42),
+    )
+    fig.subplots_adjust(left=0.02, right=0.74, bottom=0.02, top=0.93)
     return save_figure(fig, out_dir, "F7_surface_3d")
 
 
@@ -624,7 +1005,6 @@ def _f8_dcurves(
     ax.set_yscale("log")
     ax.set_xlabel(r"paso ($\times 10$, submuestreo)")
     ax.set_ylabel(r"$d(t)$ relativa (log)")
-    ax.set_title(r"F8 — Curvas $d(t)$: sincronización vs. divergencia")
     ax.legend(fontsize=7)
     fig.tight_layout()
     return save_figure(fig, out_dir, "F8_dcurves")

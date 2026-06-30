@@ -95,8 +95,8 @@ EXTERNAL_TASK_COLUMNS = [
     "global_rank_delay_recall",
     "global_rank_narma10",
     "global_rank_mg",
-    "n_total_params_mean",
-    "n_trainable_params_mean",
+    "n_total_params",
+    "n_trainable_params",
     "selected_fit_s_mean",
     "selected_test_s_mean",
     "selected_total_s_mean",
@@ -213,6 +213,18 @@ def _build_outputs(
             task_row["task_global_rank"] = int(rank) if _is_finite(rank) else None
             task_row["task_val_metric"] = row.get(metric_col) if metric_col else None
             task_row["task_test_metric"] = row.get(test_metric_col) if test_metric_col else None
+            if comparison_kind == "external":
+                prefix = "mg" if task_name == "mackey_glass" else task_name
+                task_row["n_total_params"] = row.get(
+                    f"{prefix}_n_total_params",
+                    row.get("n_total_params_mean"),
+                )
+                task_row["n_trainable_params"] = row.get(
+                    f"{prefix}_n_trainable_params",
+                    row.get("n_trainable_params_mean"),
+                )
+                task_row.pop("n_total_params_mean", None)
+                task_row.pop("n_trainable_params_mean", None)
             task_rows.append(task_row)
 
         task_rows.sort(
@@ -399,4 +411,3 @@ def _metric_sort_value(value: Any, direction: str) -> float:
 
 def _is_finite(value: Any) -> bool:
     return isinstance(value, (int, float)) and math.isfinite(float(value))
-

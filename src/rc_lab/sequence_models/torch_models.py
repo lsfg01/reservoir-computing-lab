@@ -57,12 +57,17 @@ def fit_torch_sequence_model(
     evaluate_test: bool = False,
     task_name: str | None = None,
     task_cfg: dict[str, Any] | None = None,
+    record_history: bool = False,
 ) -> dict[str, Any]:
     """
     Train a SimpleRNN/LSTM and evaluate validation/test in the original scale.
 
     The legacy full-sequence protocol remains the default. New external configs
     can opt into windowed training with truncated BPTT via training_mode.
+
+    If record_history=True, the result dict includes a 'history' key with a list
+    of {'epoch': int, 'train_loss': float | None, 'val_loss': float} dicts,
+    one per completed epoch. Behaviour is otherwise identical.
     """
     from rc_lab.sequence_models.training import compute_metrics
 
@@ -163,6 +168,7 @@ def fit_torch_sequence_model(
     epochs_ran = 0
     final_train_loss = None
     status = "ok"
+    history: list[dict[str, Any]] = []
 
     timing: dict[str, float] = {}
     with timer() as t_train:
@@ -219,6 +225,12 @@ def fit_torch_sequence_model(
                     break
 
                 epochs_ran = epoch
+                if record_history:
+                    history.append({
+                        "epoch": epoch,
+                        "train_loss": final_train_loss,
+                        "val_loss": val_loss,
+                    })
                 if val_loss < best_val - 1e-12:
                     best_val = val_loss
                     best_epoch = epoch
@@ -266,7 +278,7 @@ def fit_torch_sequence_model(
         timing["validation_s"] = 0.0
         timing["tuning_s"] = timing["fit_s"]
         timing["total_s"] = timing["train_s"]
-        return {
+        result: dict[str, Any] = {
             "val_metrics": _bad_metrics(metrics),
             "test_metrics": {},
             "timing": timing,
@@ -274,6 +286,9 @@ def fit_torch_sequence_model(
             "y_pred_val": None,
             "y_pred_test": None,
         }
+        if record_history:
+            result["history"] = history
+        return result
 
     model.load_state_dict(best_state)
     model.eval()
@@ -304,7 +319,7 @@ def fit_torch_sequence_model(
     timing["eval_s"] = timing["validation_s"] + timing.get("final_test_s", 0.0)
     timing["total_s"] = timing["train_s"] + timing["eval_s"]
 
-    return {
+    out: dict[str, Any] = {
         "val_metrics": compute_metrics(y_val, y_pred_val, metrics),
         "test_metrics": test_metrics,
         "timing": timing,
@@ -312,6 +327,9 @@ def fit_torch_sequence_model(
         "y_pred_val": y_pred_val,
         "y_pred_test": y_pred_test,
     }
+    if record_history:
+        out["history"] = history
+    return out
 
 
 class _SequenceRegressor:
