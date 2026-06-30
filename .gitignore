@@ -20,6 +20,8 @@ env/
 
 # Testing
 .pytest_cache/
+.pytest_tmp/
+.ipynb_checkpoints/
 .hypothesis/
 htmlcov/
 .coverage
@@ -41,8 +43,7 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-# Local context notes
-
+# Local research notes
 CAMPAIGN_DESIGN.md
 CANDIDATE_SELECTION_REVIEW.md
 
